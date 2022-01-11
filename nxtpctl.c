@@ -23,42 +23,43 @@
 #include "text.h"
 
 int main(/*int argc, char *argv[]*/) {
-	int ret;
-	char buf[1024];
+	char buf[256];
 	uint8_t buf_len;
 	char *port = "/dev/ttyUSB0";
 	struct serialport_t my_port;
-	struct ctlr_cfg_t ctlr;
+	struct ctlr_cfg_t my_ctlr;
 
 	/* sign controller configuration */
-	set_ctlr_config(&ctlr, 195, 255, 245);
+	set_ctlr_config(&my_ctlr, 195, 255, 245);
 
-	ret = serial_open_port(&my_port, port);
-	if (ret < 0) {
+	if (serial_open_port(&my_port, port) < 0) {
 		fprintf(stderr, "couldn't open port.\n");
 		return 1;
 	}
 
-	scrolling_text(ctlr, "VERNON & LONG BEACH & RAIL A", buf, &buf_len);
+	scrolling_text(my_ctlr,
+		1, "ARCADIA GOLD LINE STATION & RAIL G", 4, buf, &buf_len);
 	serial_send(&my_port, buf, buf_len);
-	sleep(4);
+	sleep(5);
 
-	reset_sign(ctlr, buf, &buf_len);
+	reset_sign(my_ctlr, 1, buf, &buf_len);
 	serial_send(&my_port, buf, buf_len);
-	sleep(3);
+	sleep(2);
 
-	for (uint8_t i = 0; i < 5; i++) {
-		static_text(ctlr, "STOP REQUESTED", 5, buf, &buf_len);
+	/* stop requested routine */
+	for (uint8_t i = 0; i < 3; i++) {
+		static_text(my_ctlr,
+			1, "STOP REQUESTED", 5, buf, &buf_len);
 		serial_send(&my_port, buf, buf_len);
 		sleep(8);
 
-		scrolling_text(ctlr, "PLEASE USE REAR EXIT", buf, &buf_len);
+		scrolling_text(my_ctlr,
+			1, "PLEASE USE REAR EXIT", 5, buf, &buf_len);
 		serial_send(&my_port, buf, buf_len);
 		sleep(8);
 	}
 
-	ret = serial_close_port(&my_port);
-	if (ret < 0) {
+	if (serial_close_port(&my_port) < 0) {
 		fprintf(stderr, "couldn't close port.\n");
 	}
 

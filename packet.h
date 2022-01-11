@@ -27,7 +27,7 @@ typedef struct ctlr_cfg_t {
 	uint8_t pid;
 } ctlr_cfg_t;
 
-void set_ctlr_config(struct ctlr_cfg_t *ctlr_cfg,
+extern void set_ctlr_config(struct ctlr_cfg_t *ctlr_cfg,
 	uint8_t mid, uint8_t ext_pid, uint8_t pid);
 
 /*
@@ -104,12 +104,11 @@ typedef struct msg_dle_t {
 	uint8_t tbmu;
 	uint8_t tbml;
 	uint8_t fbm;
-	uint8_t aux_state;/* 'S' or 'F' */
+	uint8_t aux_state;	/* 'S' or 'F' */
 } msg_dle_t;
 
 #define MSG_DLE_SIZE	sizeof(struct msg_dle_t)
 
-extern void add_checksum(char *pkt, uint8_t pkt_len);
 extern uint8_t make_m_pkt(char *buf, struct ctlr_cfg_t ctlr,
 	uint8_t address, uint8_t line_num, uint8_t position, char *text);
 extern uint8_t make_f_pkt(char *buf, struct ctlr_cfg_t ctlr,

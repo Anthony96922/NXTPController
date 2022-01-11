@@ -17,9 +17,9 @@
  *
  */
 
-extern void static_text(struct ctlr_cfg_t ctlr,
+extern void static_text(struct ctlr_cfg_t ctlr, uint8_t address,
 	char *text, uint8_t seconds, char *out_buf, uint8_t *buf_len);
-extern void scrolling_text(struct ctlr_cfg_t ctlr,
-	char *text, char *out_buf, uint8_t *buf_len);
-extern void reset_sign(struct ctlr_cfg_t ctlr,
+extern void scrolling_text(struct ctlr_cfg_t ctlr, uint8_t address,
+	char *text, uint8_t speed, char *out_buf, uint8_t *buf_len);
+extern void reset_sign(struct ctlr_cfg_t ctlr, uint8_t address,
  	char *out_buf, uint8_t *buf_len);

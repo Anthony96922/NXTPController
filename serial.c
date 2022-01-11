@@ -28,6 +28,8 @@
 int8_t set_port_attrs(struct serialport_t *port_obj, uint32_t speed) {
 	struct termios tty;
 
+	memset(&tty, 0, sizeof(struct termios));
+
 	if (tcgetattr(port_obj->fd, &tty) != 0) {
 		fprintf(stderr, "error from tcgetattr: %s\n", strerror(errno));
 		return -1;
@@ -41,7 +43,7 @@ int8_t set_port_attrs(struct serialport_t *port_obj, uint32_t speed) {
 	tty.c_cflag |= CS8;			/* 8-bit characters */
 	tty.c_cflag &= ~PARENB;			/* no parity bit */
 	tty.c_cflag &= ~CSTOPB;			/* only need 1 stop bit */
-	tty.c_cflag &= ~CRTSCTS;		/* no hardware flowcontrol */
+	tty.c_cflag &= ~CRTSCTS;		/* no hardware flow control */
 
 	/* setup for non-canonical mode */
 	tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR);
@@ -74,16 +76,16 @@ int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 	}
 
 	/* set speed to 9600 baud, 8n1 */
-	set_port_attrs(port_obj, B9600);
-
-	return 1;
+	return set_port_attrs(port_obj, B9600);
 }
 
-uint8_t serial_send(struct serialport_t *port_obj, char *data, uint8_t len) {
-	return write(port_obj->fd, data, len);
+uint8_t serial_send(struct serialport_t *port_obj,
+	char *data, uint8_t len) {
+	return write(port_obj->fd, data, len) < 0 ? -1 : 1;
 }
 
-uint8_t serial_receive(struct serialport_t *port_obj, char *data, uint8_t *len) {
+uint8_t serial_receive(struct serialport_t *port_obj,
+	char *data, uint8_t *len) {
 	char buf[128];
 
 	/* read up to 128 characters if ready to read */

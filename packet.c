@@ -21,7 +21,7 @@
 #include "packet.h"
 
 /* append the checksum at the end of the packet */
-void add_checksum(char *pkt, uint8_t pkt_len) {
+static void add_checksum(char *pkt, uint8_t pkt_len) {
 	char csum = 0;
 
 	for (uint8_t i = 0; i < pkt_len; i++) {
