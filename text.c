@@ -29,7 +29,7 @@ static uint8_t get_num_segments(char *text) {
 		if (text[i] == '\0') break; /* end of string */
 
 		k++;
-		if (k == MAX_TEXT_LEN) {
+		if (k == MAX_TEXT_SEG_LEN) {
 			segments++;
 			k = 0;
 		}
@@ -46,20 +46,22 @@ static uint8_t get_num_segments(char *text) {
  */
 void static_text(struct ctlr_cfg_t ctlr, uint8_t address,
 	char *text, uint8_t seconds, char *out_buf, uint8_t *buf_len) {
-	char segment[MAX_TEXT_LEN+1+1];
+	char text_buf[156+1];
+	char segment[MAX_TEXT_SEG_LEN+1];
 	uint8_t text_len;
 
 	*buf_len = 0;
 
-	memset(&segment, 0, MAX_TEXT_LEN+1+1);
-	strncpy(segment, text, MAX_TEXT_LEN+1);
-	text_len = strlen(text);
+	memset(&text_buf, 0, 156+1);
+	strncpy(text_buf, text, 156+1);
+	text_len = strlen(text_buf);
 
-	if (text_len > MAX_TEXT_LEN) { /* max text length for a packet */
-		/* only create two M packets */
-		for (uint8_t i = 0; i < 2; i++) {
-			memset(&segment, 0, 12+1);
-			strncpy(segment, text + MAX_TEXT_LEN * i, MAX_TEXT_LEN);
+	if (text_len > MAX_TEXT_SEG_LEN) { /* max text length for a packet */
+		/* create as many M packets as needed for the message */
+		for (uint8_t i = 0; i < get_num_segments(text_buf); i++) {
+			memset(&segment, 0, MAX_TEXT_SEG_LEN+1);
+			strncpy(segment,
+				text + MAX_TEXT_SEG_LEN * i, MAX_TEXT_SEG_LEN);
 			*buf_len += make_m_pkt(out_buf + *buf_len,
 						ctlr,
 						address,
@@ -74,7 +76,7 @@ void static_text(struct ctlr_cfg_t ctlr, uint8_t address,
 					address,
 					1,
 					(1 << 4) | 1,
-					segment);
+					text_buf);
 	}
 
 	/* create the F packet */
@@ -95,7 +97,7 @@ void static_text(struct ctlr_cfg_t ctlr, uint8_t address,
 void scrolling_text(struct ctlr_cfg_t ctlr, uint8_t address,
 	char *text, uint8_t speed, char *out_buf, uint8_t *buf_len) {
 	char text_buf[156+1];
-	char segment[MAX_TEXT_LEN+1];
+	char segment[MAX_TEXT_SEG_LEN+1];
 	uint8_t text_len;
 
 	*buf_len = 0;
@@ -105,12 +107,13 @@ void scrolling_text(struct ctlr_cfg_t ctlr, uint8_t address,
 	strncpy(text_buf, text, 156+1);
 	text_len = strlen(text_buf);
 
-	if (text_len > MAX_TEXT_LEN) { /* max text length for a packet */
+	if (text_len > MAX_TEXT_SEG_LEN) { /* max text length for a packet */
 		/* create as many M packets as needed for the message */
 		for (uint8_t i = 0; i < get_num_segments(text_buf); i++) {
-			memset(&segment, 0, 12+1);
+			memset(&segment, 0, MAX_TEXT_SEG_LEN + 1);
 			strncpy(segment,
-				text_buf + MAX_TEXT_LEN * i, MAX_TEXT_LEN);
+				text_buf + MAX_TEXT_SEG_LEN * i,
+				MAX_TEXT_SEG_LEN);
 			*buf_len += make_m_pkt(out_buf + *buf_len,
 						ctlr,
 						address,

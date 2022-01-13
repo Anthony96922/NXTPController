@@ -17,13 +17,14 @@
  *
  */
 
+#define SERIAL_PORT_SIZE	32
+
 /* serial port object */
 typedef struct serialport_t {
-	char port[32];
+	char port[SERIAL_PORT_SIZE];
 	int fd;
 } serialport_t;
 
-extern int8_t set_serial_attrs(struct serialport_t *port_obj, uint32_t speed);
 extern int8_t serial_open_port(struct serialport_t *port_obj, char *port);
 extern uint8_t serial_send(struct serialport_t *port_obj, char *data, uint8_t len);
 extern uint8_t serial_receive(struct serialport_t *port_obj, char *data, uint8_t *len);

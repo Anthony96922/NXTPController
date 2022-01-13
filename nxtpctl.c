@@ -22,21 +22,97 @@
 #include "serial.h"
 #include "text.h"
 
-int main(/*int argc, char *argv[]*/) {
-	char buf[256];
+#define DEFAULT_PORT	"/dev/ttyUSB0"
+
+static void show_help(char *name) {
+	fprintf(stderr,
+		"Sunrise Systems NXTP Sign Controller\n"
+		"\n"
+		"Usage: %s -t text [ -s scroll-value ]\n"
+		"\n"
+		"\t-t text\t\tText item to use\n"
+		"\t-s scroll-value\tScroll value to use\n"
+		"\n",
+	name);
+}
+
+int main(int argc, char *argv[]) {
+	int opt;
+	char buf[MAX_TEXT_LEN*2];
+	char text[MAX_TEXT_LEN];
 	uint8_t buf_len;
-	char *port = "/dev/ttyUSB0";
+	char port[SERIAL_PORT_SIZE];
+	uint8_t port_set = 0;
 	struct serialport_t my_port;
 	struct ctlr_cfg_t my_ctlr;
+	uint8_t scroll = 0;
+	uint8_t text_set = 0;
+
+	const char *short_opt = "p:t:s:h";
+	const struct option long_opt[] = {
+		{"port",	required_argument,	NULL,	'p'},
+		{"text",	required_argument,	NULL,	't'},
+		{"scroll",	required_argument,	NULL,	's'},
+		{"help",	no_argument,		NULL,	'h'},
+		{0,		0,			0,	0}
+	};
+
+
+	memset(port, 0, SERIAL_PORT_SIZE);
+	memset(text, 0, MAX_TEXT_LEN);
+
+	while ((opt = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1) {
+		switch (opt) {
+			case 'p':
+				strncpy(port, optarg, SERIAL_PORT_SIZE - 1);
+				printf("Using serial port \"%s\".\n", port);
+				port_set = 1;
+				break;
+			case 't':
+				strncpy(text, optarg, MAX_TEXT_LEN - 1);
+				printf("Using text \"%s\".\n", text);
+				text_set = 1;
+				break;
+			case 's':
+				scroll = strtoul(optarg, NULL, 16);
+				break;
+			case 'h':
+			case '?':
+			default:
+				show_help(argv[0]);
+				return 1;
+		}
+	}
+
+	if (!port_set) {
+		strcpy(port, DEFAULT_PORT);
+		printf("Using default port \"%s\".\n", port);
+	}
 
 	/* sign controller configuration */
 	set_ctlr_config(&my_ctlr, 195, 255, 245);
 
-	if (serial_open_port(&my_port, port) < 0) {
-		fprintf(stderr, "couldn't open port.\n");
-		return 1;
+	/* open the serial port (9600 8n1) */
+	if (serial_open_port(&my_port, port) < 0) return 1;
+
+	/* reset the sign */
+	reset_sign(my_ctlr, 1, buf, &buf_len);
+	serial_send(&my_port, buf, buf_len);
+
+	if (text_set) {
+		if (scroll) {
+			scrolling_text(my_ctlr,
+				1, text, scroll, buf, &buf_len);
+		} else {
+			static_text(my_ctlr,
+				1, text, 5, buf, &buf_len);
+		}
 	}
 
+	serial_send(&my_port, buf, buf_len);
+	sleep(1);
+
+#if 0
 	scrolling_text(my_ctlr,
 		1, "ARCADIA GOLD LINE STATION & RAIL G", 4, buf, &buf_len);
 	serial_send(&my_port, buf, buf_len);
@@ -58,6 +134,7 @@ int main(/*int argc, char *argv[]*/) {
 		serial_send(&my_port, buf, buf_len);
 		sleep(8);
 	}
+#endif
 
 	if (serial_close_port(&my_port) < 0) {
 		fprintf(stderr, "couldn't close port.\n");

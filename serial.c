@@ -20,12 +20,12 @@
 #include "common.h"
 #include "serial.h"
 
-/* workaround for CRTSCTS not being defined on some platforms */
+/* workaround for CRTSCTS not being defined */
 #ifndef CRTSCTS
 #define CRTSCTS	020000000000 /* flow control */
 #endif
 
-int8_t set_port_attrs(struct serialport_t *port_obj, uint32_t speed) {
+static int8_t set_port_attrs(struct serialport_t *port_obj, speed_t speed) {
 	struct termios tty;
 
 	memset(&tty, 0, sizeof(struct termios));
@@ -35,8 +35,8 @@ int8_t set_port_attrs(struct serialport_t *port_obj, uint32_t speed) {
 		return -1;
 	}
 
-	cfsetospeed(&tty, (speed_t)speed);
-	cfsetispeed(&tty, (speed_t)speed);
+	cfsetospeed(&tty, speed);
+	cfsetispeed(&tty, speed);
 
 	tty.c_cflag |= (CLOCAL | CREAD);	/* ignore modem controls */
 	tty.c_cflag &= ~CSIZE;
@@ -66,12 +66,12 @@ int8_t set_port_attrs(struct serialport_t *port_obj, uint32_t speed) {
 int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 
 	memset(port_obj, 0, sizeof(struct serialport_t));
-	strncpy(port_obj->port, port, 32);
+	strncpy(port_obj->port, port, SERIAL_PORT_SIZE);
 
 	port_obj->fd = open(port_obj->port, O_RDWR | O_NOCTTY | O_SYNC);
 	if (port_obj->fd < 0) {
 		fprintf(stderr, "error opening %s: %d (%s)\n",
-			port_obj->port, port_obj->fd, strerror(errno));
+			port_obj->port, errno, strerror(errno));
 		return -1;
 	}
 
