@@ -115,9 +115,13 @@ uint8_t make_t_pkt(char *buf, struct ctlr_cfg_t ctlr) {
 
 #ifdef DEBUG
 void print_bytes(char *msg, uint8_t len) {
-	printf("%u:", len);
+	printf("(%s): length: %u, data:", __func__, len);
 	for (uint8_t i = 0; i < len; i++) {
-		printf(" 0x%02x", msg[i]);
+		if (msg[i] >= 0x20 && msg[i] <= 0x7e) {
+			printf(" '%c'", msg[i]);
+		} else {
+			printf(" 0x%02x", msg[i]);
+		}
 	}
 	printf("\n");
 }

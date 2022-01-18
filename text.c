@@ -25,7 +25,7 @@ static uint8_t get_num_segments(char *text) {
 	uint8_t i, k = 0;
 	uint8_t segments = 0;
 
-	for (i = 0; i < 156+1; i++) {
+	for (i = 0; i < MAX_TEXT_LEN + 1; i++) {
 		if (text[i] == '\0') break; /* end of string */
 
 		k++;
@@ -46,20 +46,20 @@ static uint8_t get_num_segments(char *text) {
  */
 void static_text(struct ctlr_cfg_t ctlr, uint8_t address,
 	char *text, uint8_t seconds, char *out_buf, uint8_t *buf_len) {
-	char text_buf[156+1];
-	char segment[MAX_TEXT_SEG_LEN+1];
+	char text_buf[MAX_TEXT_LEN + 1];
+	char segment[MAX_TEXT_SEG_LEN + 1];
 	uint8_t text_len;
 
 	*buf_len = 0;
 
-	memset(&text_buf, 0, 156+1);
-	strncpy(text_buf, text, 156+1);
+	memset(text_buf, 0, MAX_TEXT_LEN + 1);
+	strncpy(text_buf, text, MAX_TEXT_LEN + 1);
 	text_len = strlen(text_buf);
 
 	if (text_len > MAX_TEXT_SEG_LEN) { /* max text length for a packet */
 		/* create as many M packets as needed for the message */
 		for (uint8_t i = 0; i < get_num_segments(text_buf); i++) {
-			memset(&segment, 0, MAX_TEXT_SEG_LEN+1);
+			memset(segment, 0, MAX_TEXT_SEG_LEN + 1);
 			strncpy(segment,
 				text + MAX_TEXT_SEG_LEN * i, MAX_TEXT_SEG_LEN);
 			*buf_len += make_m_pkt(out_buf + *buf_len,
@@ -96,21 +96,21 @@ void static_text(struct ctlr_cfg_t ctlr, uint8_t address,
  */
 void scrolling_text(struct ctlr_cfg_t ctlr, uint8_t address,
 	char *text, uint8_t speed, char *out_buf, uint8_t *buf_len) {
-	char text_buf[156+1];
-	char segment[MAX_TEXT_SEG_LEN+1];
+	char text_buf[MAX_TEXT_LEN + 1];
+	char segment[MAX_TEXT_SEG_LEN + 1];
 	uint8_t text_len;
 
 	*buf_len = 0;
 
 	/* copy text to to internal buffer */
-	memset(&text_buf, 0, 156+1);
-	strncpy(text_buf, text, 156+1);
+	memset(text_buf, 0, MAX_TEXT_LEN + 1);
+	strncpy(text_buf, text, MAX_TEXT_LEN + 1);
 	text_len = strlen(text_buf);
 
 	if (text_len > MAX_TEXT_SEG_LEN) { /* max text length for a packet */
 		/* create as many M packets as needed for the message */
 		for (uint8_t i = 0; i < get_num_segments(text_buf); i++) {
-			memset(&segment, 0, MAX_TEXT_SEG_LEN + 1);
+			memset(segment, 0, MAX_TEXT_SEG_LEN + 1);
 			strncpy(segment,
 				text_buf + MAX_TEXT_SEG_LEN * i,
 				MAX_TEXT_SEG_LEN);

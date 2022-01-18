@@ -26,3 +26,5 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
+
+#define VERSION "1.0"
