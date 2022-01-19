@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
 	int opt;
 	char text[MAX_TEXT_LEN];
 	char data_buf[BUF_LEN];
-	uint8_t data_buf_len;
+	uint16_t data_buf_len;
 	char port[PORT_SIZE];
 	uint8_t port_set = 0;
 	struct serialport_t my_port;
@@ -114,6 +114,7 @@ int main(int argc, char *argv[]) {
 	reset_sign(my_ctlr, address, data_buf, &data_buf_len);
 	serial_put_buffer(&my_port, data_buf, data_buf_len);
 	serial_send(&my_port);
+	sleep(1);
 
 #if 1
 	if (text_set) {
@@ -129,8 +130,6 @@ int main(int argc, char *argv[]) {
 
 	serial_put_buffer(&my_port, data_buf, data_buf_len);
 	serial_send(&my_port);
-	sleep(1);
-
 #else
 
 	scrolling_text(my_ctlr,

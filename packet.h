@@ -117,5 +117,5 @@ extern uint8_t make_f_pkt(char *buf, struct ctlr_cfg_t ctlr,
 extern uint8_t make_t_pkt(char *buf, struct ctlr_cfg_t ctlr);
 
 #ifdef DEBUG
-extern void print_bytes(char *msg, uint8_t len);
+extern void print_bytes(char *msg, uint16_t len);
 #endif

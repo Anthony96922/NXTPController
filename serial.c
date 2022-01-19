@@ -72,13 +72,13 @@ int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 }
 
 void serial_put_buffer(struct serialport_t *port_obj,
-	char *data, uint8_t len) {
+	char *data, uint16_t len) {
 	memcpy(port_obj->buf, data, len);
 	port_obj->buf_len = len;
 }
 
 void serial_get_buffer(struct serialport_t *port_obj,
-	char *data, uint8_t *len) {
+	char *data, uint16_t *len) {
 	memcpy(data, port_obj->buf, port_obj->buf_len);
 	*len = port_obj->buf_len;
 }

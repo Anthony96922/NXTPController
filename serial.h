@@ -18,14 +18,14 @@
  */
 
 #define PORT_SIZE	32
-#define BUF_LEN		256
+#define BUF_LEN		512
 
 /* serial port object */
 typedef struct serialport_t {
 	char port[PORT_SIZE];
 	int fd;
 	char buf[BUF_LEN];
-	uint8_t buf_len;
+	uint16_t buf_len;
 } serialport_t;
 
 /* workaround for CRTSCTS not being defined */
@@ -35,9 +35,9 @@ typedef struct serialport_t {
 
 extern int8_t serial_open_port(struct serialport_t *port_obj, char *port);
 extern void serial_put_buffer(struct serialport_t *port_obj,
-	char *data, uint8_t len);
+	char *data, uint16_t len);
 extern void serial_get_buffer(struct serialport_t *port_obj,
-	char *data, uint8_t *len);
+	char *data, uint16_t *len);
 extern int8_t serial_send(struct serialport_t *port_obj);
 extern int8_t serial_receive(struct serialport_t *port_obj);
 extern int8_t serial_close_port(struct serialport_t *port_obj);
