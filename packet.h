@@ -18,8 +18,8 @@
  */
 
 #define MAX_PKT_LEN		21
-#define MAX_TEXT_SEG_LEN	12
-#define MAX_TEXT_LEN		156
+#define MAX_TEXT_SEG_LEN	12 /* max text length for a packet */
+#define MAX_TEXT_LEN		(MAX_TEXT_SEG_LEN * 13) /* 156 */
 
 /* sign controller configuration */
 typedef struct ctlr_cfg_t {
@@ -86,8 +86,8 @@ typedef struct msg_t_t {
 typedef struct msg_rp_t {
 	uint8_t mid;
 	uint8_t ext_pid;
-	uint8_t pid;	/* 128 */
-	uint8_t pid2;	/* 254 */
+	uint8_t pid;		/* 128 */
+	uint8_t pid2;		/* 254 */
 	uint8_t sign_mid;
 } msg_rp_t;
 
@@ -96,16 +96,18 @@ typedef struct msg_rp_t {
 /* data link escape (510) */
 typedef struct msg_dle_t {
 	uint8_t sign_mid;	/* 189 */
-	uint8_t ext_pid;
-	uint8_t pid;		/* 254 */
+	uint8_t ext_pid;	/* extension PID */
+	uint8_t pid;		/* 254 (data link escape) */
 	uint8_t mid;
 	uint8_t len;		/* 7 */
+	uint8_t address;	/* address of sign queried */
 	uint8_t state;		/* 'R', 'B' or 'P' */
 	uint8_t host_mid;
-	uint8_t tbmu;
-	uint8_t tbml;
-	uint8_t fbm;
+	uint8_t tbmu;		/* text bit map upper */
+	uint8_t tbml;		/* text bit map lower */
+	uint8_t fbm;		/* format bit map */
 	uint8_t aux_state;	/* 'S' or 'F' */
+	uint8_t checksum;
 } msg_dle_t;
 
 #define MSG_DLE_SIZE	sizeof(struct msg_dle_t)
@@ -115,6 +117,8 @@ extern uint8_t make_m_pkt(char *buf, struct ctlr_cfg_t ctlr,
 extern uint8_t make_f_pkt(char *buf, struct ctlr_cfg_t ctlr,
 	uint8_t param, uint8_t value);
 extern uint8_t make_t_pkt(char *buf, struct ctlr_cfg_t ctlr);
+extern uint8_t make_rp_pkt(char *buf, struct ctlr_cfg_t ctlr);
+extern void read_dle_pkt(char *buf, uint8_t len, struct msg_dle_t *msg);
 
 #ifdef DEBUG
 extern void print_bytes(char *msg, uint16_t len);

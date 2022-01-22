@@ -21,69 +21,66 @@
 #include "packet.h"
 
 /* get the number of segments needed to transmit a message */
-static uint8_t get_num_segments(char *text) {
+static uint8_t get_num_segs(uint8_t len) {
 	uint16_t i;
 	uint8_t k = 0;
 	uint8_t segments = 0;
 
-	for (i = 0; i < MAX_TEXT_LEN + 1; i++) {
-		if (text[i] == '\0') break; /* end of string */
-
-		k++;
-		if (k == MAX_TEXT_SEG_LEN) {
+	for (i = 0; i < len; i++) {
+		if (++k == MAX_TEXT_SEG_LEN) {
 			segments++;
 			k = 0;
 		}
 	}
 
-	segments += 1; /* for last segment with < 12 chars */
+	/*
+	 * add an extra segment if length is not a multiple of 12
+	 *
+	 * needed to accomodate the last segment with < 12 chars
+	 */
+	if (len % 12) segments++;
+
+#ifdef DEBUG
+	printf("(%s): length: %u, segments needed: %u\n",
+		__func__, len, segments);
+#endif
 
 	return segments;
 }
 
+static uint16_t make_text_pkts(char *buf, struct ctlr_cfg_t ctlr,
+	uint8_t address, char *text) {
+	char segment[MAX_TEXT_SEG_LEN + 1];
+	uint8_t num_segs;
+	uint16_t buf_len = 0;
+
+	num_segs = get_num_segs(strlen(text));
+
+	/* create as many M packets as needed for the entire string */
+	for (uint8_t i = 0; i < num_segs; i++) {
+		memset(segment, 0, MAX_TEXT_SEG_LEN + 1);
+		strncpy(segment, text + MAX_TEXT_SEG_LEN * i,
+			MAX_TEXT_SEG_LEN);
+		buf_len += make_m_pkt(buf + buf_len,
+					ctlr,
+					address,
+					1,
+					(((1 + i) & 15) << 4) | 1,
+					segment);
+	}
+
+	return buf_len;
+}
+
 /*
- * static text (sign will scroll text if longer than 13 chars)
+ * static text (sign will scroll text if longer than 16 chars)
  *
  */
 void static_text(struct ctlr_cfg_t ctlr, uint8_t address,
 	char *text, uint8_t seconds, char *out_buf, uint16_t *buf_len) {
-	char text_buf[MAX_TEXT_LEN + 1];
-	char segment[MAX_TEXT_SEG_LEN + 1];
-	uint8_t text_len;
-	uint8_t num_segs;
 
-	*buf_len = 0;
-
-	/* copy test to the internal buffer */
-	memset(text_buf, 0, MAX_TEXT_LEN + 1);
-	strncpy(text_buf, text, MAX_TEXT_LEN + 1);
-	text_len = strlen(text_buf);
-
-	if (text_len > MAX_TEXT_SEG_LEN) { /* max text length for a packet */
-		num_segs = get_num_segments(text_buf);
-
-		/* create as many M packets as needed for the message */
-		for (uint8_t i = 0; i < num_segs; i++) {
-			memset(segment, 0, MAX_TEXT_SEG_LEN + 1);
-			strncpy(segment,
-				text + MAX_TEXT_SEG_LEN * i,
-				MAX_TEXT_SEG_LEN);
-			*buf_len += make_m_pkt(out_buf + *buf_len,
-						ctlr,
-						address,
-						1,
-						(((1 + i) & 15) << 4) | 1,
-						segment);
-		}
-	} else {
-		/* create one M packet */
-		*buf_len += make_m_pkt(out_buf + *buf_len,
-					ctlr,
-					address,
-					1,
-					(1 << 4) | 1,
-					text_buf);
-	}
+	/* create one or more M packets */
+	*buf_len = make_text_pkts(out_buf, ctlr, address, text);
 
 	/* create the F packet */
 	*buf_len += make_f_pkt(out_buf + *buf_len, ctlr, 'R', seconds * 10);
@@ -102,42 +99,9 @@ void static_text(struct ctlr_cfg_t ctlr, uint8_t address,
  */
 void scrolling_text(struct ctlr_cfg_t ctlr, uint8_t address,
 	char *text, uint8_t speed, char *out_buf, uint16_t *buf_len) {
-	char text_buf[MAX_TEXT_LEN + 1];
-	char segment[MAX_TEXT_SEG_LEN + 1];
-	uint8_t text_len;
-	uint8_t num_segs;
 
-	*buf_len = 0;
-
-	/* copy text to to internal buffer */
-	memset(text_buf, 0, MAX_TEXT_LEN + 1);
-	strncpy(text_buf, text, MAX_TEXT_LEN + 1);
-	text_len = strlen(text_buf);
-
-	if (text_len > MAX_TEXT_SEG_LEN) { /* max text length for a packet */
-		num_segs = get_num_segments(text_buf);
-
-		/* create as many M packets as needed for the message */
-		for (uint8_t i = 0; i < num_segs; i++) {
-			memset(segment, 0, MAX_TEXT_SEG_LEN + 1);
-			strncpy(segment,
-				text_buf + MAX_TEXT_SEG_LEN * i,
-				MAX_TEXT_SEG_LEN);
-			*buf_len += make_m_pkt(out_buf + *buf_len,
-						ctlr,
-						address,
-						1,
-						(((1 + i) & 15) << 4) | 1,
-						segment);
-		}
-	} else {
-		*buf_len += make_m_pkt(out_buf + *buf_len,
-					ctlr,
-					address,
-					1,
-					(1 << 4) | 1,
-					text_buf);
-	}
+	/* create one or more M packets */
+	*buf_len = make_text_pkts(out_buf, ctlr, address, text);
 
 	/* create the F packet */
 	*buf_len += make_f_pkt(out_buf + *buf_len, ctlr, 'S', speed);
@@ -160,6 +124,7 @@ void reset_sign(struct ctlr_cfg_t ctlr,
 
 	*buf_len = 0;
 
+	/* make a single M packet to reset the sign */
 	*buf_len += make_m_pkt(out_buf + *buf_len,
 				ctlr,
 				address,

@@ -43,7 +43,7 @@ static void show_help(char *name) {
 
 int main(int argc, char *argv[]) {
 	int opt;
-	char text[MAX_TEXT_LEN];
+	char text[MAX_TEXT_LEN + 1];
 	char data_buf[BUF_LEN];
 	uint16_t data_buf_len;
 	char port[PORT_SIZE];
@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
 
 
 	memset(port, 0, PORT_SIZE);
-	memset(text, 0, MAX_TEXT_LEN);
+	memset(text, 0, MAX_TEXT_LEN + 1);
 
 	while ((opt = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1)
 	{
@@ -81,12 +81,13 @@ int main(int argc, char *argv[]) {
 				printf("Using address %u.\n", address);
 				break;
 			case 't':
-				strncpy(text, optarg, MAX_TEXT_LEN - 1);
+				strncpy(text, optarg, MAX_TEXT_LEN);
 				printf("Using text \"%s\".\n", text);
 				text_set = 1;
 				break;
 			case 's':
 				scroll = strtoul(optarg, NULL, 16);
+				printf("Using scroll value %u.\n", scroll);
 				break;
 			case 'v':
 				printf(VERSION "\n");
@@ -130,6 +131,14 @@ int main(int argc, char *argv[]) {
 
 	serial_put_buffer(&my_port, data_buf, data_buf_len);
 	serial_send(&my_port);
+	data_buf_len = make_rp_pkt(data_buf, my_ctlr);
+	serial_put_buffer(&my_port, data_buf, data_buf_len);
+	serial_send(&my_port);
+	sleep(1);
+	serial_receive(&my_port);
+	serial_get_buffer(&my_port, data_buf, &data_buf_len);
+	struct msg_dle_t rx_msg;
+	read_dle_pkt(data_buf, data_buf_len, &rx_msg);
 #else
 
 	scrolling_text(my_ctlr,

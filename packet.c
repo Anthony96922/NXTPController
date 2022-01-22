@@ -49,6 +49,7 @@ uint8_t make_m_pkt(char *buf, struct ctlr_cfg_t ctlr,
 	uint8_t address, uint8_t line_num, uint8_t position, char *text) {
 	struct msg_m_t msg;
 	uint8_t text_len = strlen(text);
+	uint8_t pkt_len = 0;
 
 	/* create the M packet */
 	msg.mid		= ctlr.mid;
@@ -62,14 +63,20 @@ uint8_t make_m_pkt(char *buf, struct ctlr_cfg_t ctlr,
 
 	/* copy to output buffer */
 	memcpy(buf, &msg, MSG_M_SIZE);
+	pkt_len += MSG_M_SIZE;
 
 	/* add text */
-	memcpy(buf + MSG_M_SIZE, text, text_len);
+	memcpy(buf + pkt_len, text, text_len);
+	pkt_len += text_len;
 
 	/* finally, add the checksum to complete the packet */
-	add_checksum(buf, MSG_M_SIZE + text_len);
+	add_checksum(buf, pkt_len);
+	pkt_len += 1;
 
-	return MSG_M_SIZE + text_len + 1;
+	/* size check */
+	if (pkt_len > MAX_PKT_LEN) pkt_len = MAX_PKT_LEN;
+
+	return pkt_len;
 }
 
 uint8_t make_f_pkt(char *buf, struct ctlr_cfg_t ctlr,
@@ -113,7 +120,61 @@ uint8_t make_t_pkt(char *buf, struct ctlr_cfg_t ctlr) {
 	return MSG_T_SIZE + 1;
 }
 
+/*
+ * make RP (request parameter) packet
+ *
+ */
+uint8_t make_rp_pkt(char *buf, struct ctlr_cfg_t ctlr) {
+	struct msg_rp_t msg;
+
+	/* create the RP packet */
+	msg.mid		= ctlr.pid;
+	msg.ext_pid	= ctlr.ext_pid;
+	msg.pid		= 384 % 256;	/* 128 */
+	msg.pid2	= 510 % 256;	/* 254 */
+	msg.sign_mid	= 189;
+
+	/* copy to output buffer */
+	memcpy(buf, &msg, MSG_RP_SIZE);
+
+	/* finally, add the checksum to complete the packet */
+	add_checksum(buf, MSG_RP_SIZE);
+
+	return MSG_RP_SIZE + 1;
+}
+
+/*
+ * RP response packet
+ *
+ */
+void read_dle_pkt(char *buf, uint8_t len, struct msg_dle_t *msg) {
+	if (len >= MSG_DLE_SIZE) {
+		/* copy received packet as is */
+		memcpy(msg, buf, MSG_DLE_SIZE);
+	}
+
 #ifdef DEBUG
+	printf("(%s): %u %u %u"
+		" %u %u %u"
+		" '%c' %u 0x%02x 0x%02x 0x%02x '%c' 0x%02x\n",
+		__func__,
+		msg->sign_mid, msg->ext_pid, msg->pid, msg->mid,
+		msg->len,
+		msg->address,
+		msg->state,
+		msg->host_mid,
+		msg->tbmu, msg->tbml, msg->fbm,
+		msg->aux_state,
+		msg->checksum
+	);
+#endif
+}
+
+#ifdef DEBUG
+/*
+ * output raw data
+ *
+ */
 void print_bytes(char *msg, uint16_t len) {
 	printf("(%s): length: %u, data:", __func__, len);
 	for (uint16_t i = 0; i < len; i++) {

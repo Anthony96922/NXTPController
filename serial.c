@@ -17,6 +17,13 @@
  *
  */
 
+/*
+ * code for handling serial I/O
+ *
+ * parts of this code came from
+ * https://stackoverflow.com/questions/57152937/canonical-mode-linux-serial-port/57155531#57155531
+ */
+
 #include "common.h"
 #include "serial.h"
 
@@ -28,16 +35,16 @@ int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 
 	port_obj->fd = open(port_obj->port, O_RDWR | O_NOCTTY | O_SYNC);
 	if (port_obj->fd < 0) {
-		fprintf(stderr, "Error opening %s: %d (%s)\n",
-			port_obj->port, -errno, strerror(errno));
+		fprintf(stderr, "(%s): Error opening %s: %d (%s)\n",
+			__func__, port_obj->port, -errno, strerror(errno));
 		return -1;
 	}
 
 	memset(&tty, 0, sizeof(struct termios));
 
 	if (tcgetattr(port_obj->fd, &tty) != 0) {
-		fprintf(stderr, "Error from tcgetattr: %d (%s)\n",
-			-errno, strerror(errno));
+		fprintf(stderr, "(%s): Error from tcgetattr: %d (%s)\n",
+			__func__, -errno, strerror(errno));
 		return -1;
 	}
 
@@ -63,8 +70,8 @@ int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 	tty.c_cc[VTIME] = 1;
 
 	if (tcsetattr(port_obj->fd, TCSANOW, &tty) != 0) {
-		fprintf(stderr, "Error from tcsetattr: %d (%s)\n",
-			-errno, strerror(errno));
+		fprintf(stderr, "(%s): Error from tcsetattr: %d (%s)\n",
+			__func__, -errno, strerror(errno));
 		return -1;
 	}
 
@@ -73,6 +80,9 @@ int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 
 void serial_put_buffer(struct serialport_t *port_obj,
 	char *data, uint16_t len) {
+	/* buffer overflow protection */
+	if (len > BUF_LEN) len = BUF_LEN;
+
 	memcpy(port_obj->buf, data, len);
 	port_obj->buf_len = len;
 }
@@ -97,17 +107,19 @@ int8_t serial_send(struct serialport_t *port_obj) {
 
 	/* return when there is nothing to send */
 	if (!port_obj->buf_len) {
-		fprintf(stderr, "Nothing to send!\n");
+		fprintf(stderr, "(%s): Nothing to send!\n", __func__);
 		return -1;
 	}
 
-	/* write up to 255 characters */
+	/* write up to 512 characters */
 	ret = write(port_obj->fd, port_obj->buf, port_obj->buf_len);
 	if (ret < 0) {
-		fprintf(stderr, "Couldn't send: %d (%s)\n",
-			-errno, strerror(errno));
+		fprintf(stderr, "(%s): Couldn't send: %d (%s)\n",
+			__func__, -errno, strerror(errno));
 		return -1;
 	} else {
+		/* wait for sending to finish */
+		tcdrain(port_obj->fd);
 		/* reset internal buffer when done */
 		serial_reset_buffer(port_obj);
 		return 1;
@@ -117,14 +129,14 @@ int8_t serial_send(struct serialport_t *port_obj) {
 int8_t serial_receive(struct serialport_t *port_obj) {
 	int16_t ret;
 
-	/* reset internal buffer */
+	/* prepare internal buffer for new data */
 	serial_reset_buffer(port_obj);
 
-	/* read up to 255 characters */
-	ret = read(port_obj->fd, port_obj->buf, BUF_LEN - 1);
+	/* read up to 512 characters */
+	ret = read(port_obj->fd, port_obj->buf, BUF_LEN);
 	if (ret < 0) {
-		fprintf(stderr, "Couldn't receive: %d (%s)\n",
-			-errno, strerror(errno));
+		fprintf(stderr, "(%s): Couldn't receive: %d (%s)\n",
+			__func__, -errno, strerror(errno));
 		return -1;
 	} else {
 		/* set actual number of bytes when done */
@@ -135,8 +147,8 @@ int8_t serial_receive(struct serialport_t *port_obj) {
 
 int8_t serial_close_port(struct serialport_t *port_obj) {
 	if (close(port_obj->fd) < 0) {
-		fprintf(stderr, "Error closing %s: %d (%s)\n",
-			port_obj->port, -errno, strerror(errno));
+		fprintf(stderr, "(%s): Error closing %s: %d (%s)\n",
+			__func__, port_obj->port, -errno, strerror(errno));
 		return -1;
 	} else {
 		return 1;
