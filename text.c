@@ -19,14 +19,14 @@
 
 #include "common.h"
 #include "packet.h"
+#include "text.h"
 
 /* get the number of segments needed to transmit a message */
 static uint8_t get_num_segs(uint8_t len) {
-	uint16_t i;
 	uint8_t k = 0;
 	uint8_t segments = 0;
 
-	for (i = 0; i < len; i++) {
+	for (uint16_t i = 0; i < len; i++) {
 		if (++k == MAX_TEXT_SEG_LEN) {
 			segments++;
 			k = 0;
@@ -38,11 +38,13 @@ static uint8_t get_num_segs(uint8_t len) {
 	 *
 	 * needed to accomodate the last segment with < 12 chars
 	 */
-	if (len % 12) segments++;
+	if (len % MAX_TEXT_SEG_LEN) segments++;
 
 #ifdef DEBUG
-	printf("(%s): length: %u, segments needed: %u\n",
-		__func__, len, segments);
+	printf("(%s): length: %u, segments needed: %u,"
+		" last segment will have %u characters\n",
+		__func__, len, segments,
+		MAX_TEXT_SEG_LEN - (segments * MAX_TEXT_SEG_LEN - len));
 #endif
 
 	return segments;
@@ -51,66 +53,56 @@ static uint8_t get_num_segs(uint8_t len) {
 static uint16_t make_text_pkts(char *buf, struct ctlr_cfg_t ctlr,
 	uint8_t address, char *text) {
 	char segment[MAX_TEXT_SEG_LEN + 1];
-	uint8_t num_segs;
+	uint8_t num_segs = get_num_segs(strlen(text));
 	uint16_t buf_len = 0;
-
-	num_segs = get_num_segs(strlen(text));
+	uint8_t pkt_len;
 
 	/* create as many M packets as needed for the entire string */
 	for (uint8_t i = 0; i < num_segs; i++) {
 		memset(segment, 0, MAX_TEXT_SEG_LEN + 1);
 		strncpy(segment, text + MAX_TEXT_SEG_LEN * i,
 			MAX_TEXT_SEG_LEN);
-		buf_len += make_m_pkt(buf + buf_len,
+		pkt_len = make_m_pkt(buf + buf_len,
 					ctlr,
 					address,
 					1,
 					(((1 + i) & 15) << 4) | 1,
 					segment);
+
+#ifdef DEBUG
+		print_bytes(buf + buf_len, pkt_len);
+#endif
+		buf_len += pkt_len;
+
 	}
 
 	return buf_len;
 }
 
 /*
- * static text (sign will scroll text if longer than 16 chars)
+ * display text (sign will scroll text if longer than 16 chars)
  *
  */
-void static_text(struct ctlr_cfg_t ctlr, uint8_t address,
-	char *text, uint8_t seconds, char *out_buf, uint16_t *buf_len) {
+void make_text(struct ctlr_cfg_t ctlr, struct data_buf_t *buf,
+	uint8_t address, char *text) {
 
 	/* create one or more M packets */
-	*buf_len = make_text_pkts(out_buf, ctlr, address, text);
-
-	/* create the F packet */
-	*buf_len += make_f_pkt(out_buf + *buf_len, ctlr, 'R', seconds * 10);
-
-	/* create the T packet */
-	*buf_len += make_t_pkt(out_buf + *buf_len, ctlr);
-
-#ifdef DEBUG
-	print_bytes(out_buf, *buf_len);
-#endif
+	buf->len = make_text_pkts(buf->data, ctlr, address, text);
 }
 
 /*
- * scrolling text
+ * text formatting
  *
  */
-void scrolling_text(struct ctlr_cfg_t ctlr, uint8_t address,
-	char *text, uint8_t speed, char *out_buf, uint16_t *buf_len) {
-
-	/* create one or more M packets */
-	*buf_len = make_text_pkts(out_buf, ctlr, address, text);
+void make_format_packet(struct ctlr_cfg_t ctlr, struct data_buf_t *buf,
+	struct text_fmt_t fmt) {
 
 	/* create the F packet */
-	*buf_len += make_f_pkt(out_buf + *buf_len, ctlr, 'S', speed);
-
-	/* create the T packet */
-	*buf_len += make_t_pkt(out_buf + *buf_len, ctlr);
+	buf->len = make_f_pkt(buf->data + buf->len, ctlr,
+				fmt.name, fmt.value);
 
 #ifdef DEBUG
-	print_bytes(out_buf, *buf_len);
+	print_bytes(buf->data, buf->len);
 #endif
 }
 
@@ -119,22 +111,31 @@ void scrolling_text(struct ctlr_cfg_t ctlr, uint8_t address,
  * useful for preempting important messages like next stop
  *
  */
-void reset_sign(struct ctlr_cfg_t ctlr,
-	uint8_t address, char *out_buf, uint8_t *buf_len) {
-
-	*buf_len = 0;
+void make_reset_packet(struct ctlr_cfg_t ctlr, struct data_buf_t *buf,
+	uint8_t address) {
 
 	/* make a single M packet to reset the sign */
-	*buf_len += make_m_pkt(out_buf + *buf_len,
+	buf->len = make_m_pkt(buf->data,
 				ctlr,
 				address,
 				1,
 				0, /* position = 0: reset the sign */
-				"0");
-
-	*buf_len += make_t_pkt(out_buf + *buf_len, ctlr);
+				" ");
 
 #ifdef DEBUG
-	print_bytes(out_buf, *buf_len);
+	print_bytes(buf->data, buf->len);
+#endif
+}
+
+/*
+ * trigger packet
+ *
+ */
+void make_trigger_packet(struct ctlr_cfg_t ctlr, struct data_buf_t *buf) {
+
+	buf->len = make_t_pkt(buf->data, ctlr);
+
+#ifdef DEBUG
+	print_bytes(buf->data, buf->len);
 #endif
 }

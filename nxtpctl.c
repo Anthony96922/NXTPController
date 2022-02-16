@@ -28,13 +28,14 @@ static void show_help(char *name) {
 	fprintf(stderr,
 		"Sunrise Systems NXTP Sign Controller v" VERSION "\n"
 		"\n"
-		"Usage: %s [ -p port ] -a address\n"
-		"\t\t-t text [ -s scroll-value ]\n"
+		"Usage: %s [ -p port ] -a address|addr1,addr2\n"
+		"\t\t-t text [ -f fmt-name,fmt-value ... ]\n"
 		"\n"
 		"\t-p port\t\tUART port to use (default: \"%s\")\n"
 		"\t-a address\tAddress of one or more signs\n"
 		"\t-t text\t\tText string to use\n"
-		"\t-s scroll-value\tScroll value to use\n"
+		"\t-f name,value\tFormat name and value\n"
+		"\t-r\t\tRailroad X-ing mode\n"
 		"\t-h\t\tShow this help and exit\n"
 		"\t-v\t\tShow version and exit\n"
 		"\n",
@@ -44,26 +45,32 @@ static void show_help(char *name) {
 int main(int argc, char *argv[]) {
 	int opt;
 	char text[MAX_TEXT_LEN + 1];
-	char data_buf[BUF_LEN];
-	uint16_t data_buf_len;
+	struct data_buf_t data_buf;
 	char port[PORT_SIZE];
 	uint8_t port_set = 0;
 	struct serialport_t my_port;
 	struct ctlr_cfg_t my_ctlr;
-	uint8_t address = 0; /* default to all signs */
-	uint8_t scroll = 0;
+	uint8_t address[2] = {0}; /* default to all signs */
+	struct text_fmt_t fmt[5];
+	uint8_t fmt_idx = 0;
 	uint8_t text_set = 0;
+	uint8_t rrxing = 0;
 
-	const char *short_opt = "p:a:t:s:hv";
+	const char *short_opt = "p:a:t:f:rhv";
 	const struct option long_opt[] = {
 		{"port",	required_argument,	NULL,	'p'},
 		{"address",	required_argument,	NULL,	'a'},
 		{"text",	required_argument,	NULL,	't'},
-		{"scroll",	required_argument,	NULL,	's'},
+		{"format",	required_argument,	NULL,	's'},
+
+		/* preset functions */
+		{"rrxing", 	required_argument,	NULL,	128},
+
 		{"help",	no_argument,		NULL,	'h'},
 		{0,		0,			0,	0}
 	};
 
+	address[0] = 1;
 
 	memset(port, 0, PORT_SIZE);
 	memset(text, 0, MAX_TEXT_LEN + 1);
@@ -77,17 +84,46 @@ int main(int argc, char *argv[]) {
 				port_set = 1;
 				break;
 			case 'a':
-				address = strtoul(optarg, NULL, 16) & 255;
-				printf("Using address %u.\n", address);
+				if (sscanf(optarg, "%hhu,%hhu",
+					&address[0], &address[1]) == 2) {
+					printf("Configured addresses %u and %u"
+						" for railroad crossing"
+						" mode.\n",
+						address[0], address[1]);
+				} else {
+					address[0] = strtoul(optarg, NULL, 16);
+					printf("Using address %u.\n",
+						address[0]);
+				}
 				break;
 			case 't':
 				strncpy(text, optarg, MAX_TEXT_LEN);
 				printf("Using text \"%s\".\n", text);
 				text_set = 1;
 				break;
-			case 's':
-				scroll = strtoul(optarg, NULL, 16);
-				printf("Using scroll value %u.\n", scroll);
+			case 'f':
+				if (sscanf(optarg, "%c,%hhu",
+					&fmt[fmt_idx].name,
+					&fmt[fmt_idx].value) == 2) {
+					printf("Using format '%c' = %u.\n",
+						fmt[fmt_idx].name,
+						fmt[fmt_idx].value);
+					if (fmt_idx < 5) fmt_idx++;
+				} else if (sscanf(optarg, "%c,%c",
+					&fmt[fmt_idx].name,
+					&fmt[fmt_idx].value) == 2) {
+					printf("Using format '%c' = '%c'.\n",
+						fmt[fmt_idx].name,
+						fmt[fmt_idx].value);
+					if (fmt_idx < 5) fmt_idx++;
+				} else {
+					printf("Invalid format syntax.\n");
+				}
+				break;
+
+			case 'r':
+				rrxing = 1;
+				printf("Activated railroad crossing mode.\n");
 				break;
 			case 'v':
 				printf(VERSION "\n");
@@ -112,65 +148,141 @@ int main(int argc, char *argv[]) {
 	if (serial_open_port(&my_port, port) < 0) return 1;
 
 	/* reset the sign */
-	reset_sign(my_ctlr, address, data_buf, &data_buf_len);
-	serial_put_buffer(&my_port, data_buf, data_buf_len);
+	make_reset_packet(my_ctlr, &data_buf, address[0]);
+	serial_put_buffer(&my_port, data_buf);
 	serial_send(&my_port);
-	sleep(1);
+	reset_data_buf(&data_buf);
+
+	if (rrxing) {
+		uint8_t k = 0;
+
+		for (uint8_t i = 0; i < 30; i++) {
+			k ^= 1;
+			for (uint8_t j = 0; j < 2; j++) {
+				make_text(my_ctlr, &data_buf,
+						j ? address[1] : address[0],
+						j ?
+							(k ? "^Y12" : "^Y13") :
+							(k ? "^Y13" : "^Y12")
+				);
+				serial_put_buffer(&my_port, data_buf);
+				serial_send(&my_port);
+				reset_data_buf(&data_buf);
+
+				make_trigger_packet(my_ctlr, &data_buf);
+				serial_put_buffer(&my_port, data_buf);
+				serial_send(&my_port);
+				reset_data_buf(&data_buf);
+
+			}
+
+			usleep(500000);
+		}
+
+		/* reset when finished */
+		for (uint8_t j = 0; j < 2; j++) {
+			make_reset_packet(my_ctlr, &data_buf,
+				j ? address[1] : address[0]);
+			serial_put_buffer(&my_port, data_buf);
+			serial_send(&my_port);
+			reset_data_buf(&data_buf);
+		}
+
+		goto exit;
+	}
 
 #if 1
 	if (text_set) {
-		if (scroll) {
-			scrolling_text(my_ctlr,
-				address, text, scroll,
-				data_buf, &data_buf_len);
-		} else {
-			static_text(my_ctlr,
-				address, text, 5, data_buf, &data_buf_len);
-		}
+		make_text(my_ctlr, &data_buf,
+			address[0], text);
+
+		serial_put_buffer(&my_port, data_buf);
+		serial_send(&my_port);
+		reset_data_buf(&data_buf);
 	}
 
-	serial_put_buffer(&my_port, data_buf, data_buf_len);
+	for (uint8_t i = 0; i < fmt_idx; i++) {
+		make_format_packet(my_ctlr, &data_buf, fmt[i]);
+
+		serial_put_buffer(&my_port, data_buf);
+		serial_send(&my_port);
+		reset_data_buf(&data_buf);
+	}
+
+	make_trigger_packet(my_ctlr, &data_buf);
+	serial_put_buffer(&my_port, data_buf);
 	serial_send(&my_port);
-	data_buf_len = make_rp_pkt(data_buf, my_ctlr);
-	serial_put_buffer(&my_port, data_buf, data_buf_len);
-	serial_send(&my_port);
-	sleep(1);
-	serial_receive(&my_port);
-	serial_get_buffer(&my_port, data_buf, &data_buf_len);
-	struct msg_dle_t rx_msg;
-	read_dle_pkt(data_buf, data_buf_len, &rx_msg);
+	reset_data_buf(&data_buf);
 #else
-
-	scrolling_text(my_ctlr,
-		address, "ARCADIA GOLD LINE STATION & RAIL G",
-		4, data_buf, &data_buf_len);
-	serial_put_buffer(&my_port, data_buf, data_buf_len);
+	struct text_fmt_t tmp_fmt;
+	make_text(my_ctlr, &data_buf,
+		address[0], "ARCADIA GOLD LINE STATION & RAIL G");
+	serial_put_buffer(&my_port, data_buf);
 	serial_send(&my_port);
-	sleep(5);
+	reset_data_buf(&data_buf);
 
-	reset_sign(my_ctlr, address, data_buf, &data_buf_len);
-	serial_put_buffer(&my_port, data_buf, data_buf_len);
+	tmp_fmt.name = 'S';
+	tmp_fmt.value = 3;
+	make_format_packet(my_ctlr, &data_buf, tmp_fmt);
+	serial_put_buffer(&my_port, data_buf);
 	serial_send(&my_port);
+	reset_data_buf(&data_buf);
+
+	make_trigger_packet(my_ctlr, &data_buf);
+	serial_put_buffer(&my_port, data_buf);
+	serial_send(&my_port);
+	reset_data_buf(&data_buf);
+	sleep(6);
+
+	make_reset_packet(my_ctlr, &data_buf, address[0]);
+	serial_put_buffer(&my_port, data_buf);
+	serial_send(&my_port);
+	reset_data_buf(&data_buf);
 	sleep(2);
 
 	/* stop requested routine */
 	for (uint8_t i = 0; i < 3; i++) {
-		static_text(my_ctlr,
-			address, "STOP REQUESTED", 5,
-			data_buf, &data_buf_len);
-		serial_put_buffer(&my_port, data_buf, data_buf_len);
+		make_text(my_ctlr, &data_buf,
+			address[0], "STOP REQUESTED");
+		serial_put_buffer(&my_port, data_buf);
 		serial_send(&my_port);
-		sleep(7);
+		reset_data_buf(&data_buf);
 
-		scrolling_text(my_ctlr,
-			address, "PLEASE USE REAR EXIT", 5,
-			data_buf, &data_buf_len);
-		serial_put_buffer(&my_port, data_buf, data_buf_len);
+		tmp_fmt.name = 'R';
+		tmp_fmt.value = 50;
+		make_format_packet(my_ctlr, &data_buf, tmp_fmt);
+		serial_put_buffer(&my_port, data_buf);
 		serial_send(&my_port);
-		sleep(7);
+		reset_data_buf(&data_buf);
+
+		make_trigger_packet(my_ctlr, &data_buf);
+		serial_put_buffer(&my_port, data_buf);
+		serial_send(&my_port);
+		reset_data_buf(&data_buf);
+		sleep(8);
+
+		make_text(my_ctlr, &data_buf,
+			address[0], "PLEASE USE REAR EXIT");
+		serial_put_buffer(&my_port, data_buf);
+		serial_send(&my_port);
+		reset_data_buf(&data_buf);
+
+		tmp_fmt.name = 'S';
+		tmp_fmt.value = 3;
+		make_format_packet(my_ctlr, &data_buf, tmp_fmt);
+		serial_put_buffer(&my_port, data_buf);
+		serial_send(&my_port);
+		reset_data_buf(&data_buf);
+
+		make_trigger_packet(my_ctlr, &data_buf);
+		serial_put_buffer(&my_port, data_buf);
+		serial_send(&my_port);
+		reset_data_buf(&data_buf);
+		sleep(8);
 	}
 #endif
 
+exit:
 	serial_close_port(&my_port);
 
 	return 0;

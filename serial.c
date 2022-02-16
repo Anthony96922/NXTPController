@@ -25,6 +25,7 @@
  */
 
 #include "common.h"
+#include "packet.h"
 #include "serial.h"
 
 int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
@@ -79,18 +80,18 @@ int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 }
 
 void serial_put_buffer(struct serialport_t *port_obj,
-	char *data, uint16_t len) {
+	struct data_buf_t data_buf) {
 	/* buffer overflow protection */
-	if (len > BUF_LEN) len = BUF_LEN;
+	if (data_buf.len > BUF_LEN) data_buf.len = BUF_LEN;
 
-	memcpy(port_obj->buf, data, len);
-	port_obj->buf_len = len;
+	memcpy(port_obj->buf, data_buf.data, data_buf.len);
+	port_obj->buf_len = data_buf.len;
 }
 
 void serial_get_buffer(struct serialport_t *port_obj,
-	char *data, uint16_t *len) {
-	memcpy(data, port_obj->buf, port_obj->buf_len);
-	*len = port_obj->buf_len;
+	struct data_buf_t *data_buf) {
+	memcpy(data_buf->data, port_obj->buf, port_obj->buf_len);
+	data_buf->len = port_obj->buf_len;
 }
 
 /*

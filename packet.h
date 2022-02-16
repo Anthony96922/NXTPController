@@ -19,7 +19,8 @@
 
 #define MAX_PKT_LEN		21
 #define MAX_TEXT_SEG_LEN	12 /* max text length for a packet */
-#define MAX_TEXT_LEN		(MAX_TEXT_SEG_LEN * 13) /* 156 */
+#define MAX_TEXT_SEGS		13 /* max number of text segments */
+#define MAX_TEXT_LEN		(MAX_TEXT_SEG_LEN * MAX_TEXT_SEGS) /* 156 */
 
 /* sign controller configuration */
 typedef struct ctlr_cfg_t {
@@ -112,6 +113,11 @@ typedef struct msg_dle_t {
 
 #define MSG_DLE_SIZE	sizeof(struct msg_dle_t)
 
+typedef struct data_buf_t {
+	char data[BUF_LEN];
+	uint16_t len;
+} data_buf_t;
+
 extern uint8_t make_m_pkt(char *buf, struct ctlr_cfg_t ctlr,
 	uint8_t address, uint8_t line_num, uint8_t position, char *text);
 extern uint8_t make_f_pkt(char *buf, struct ctlr_cfg_t ctlr,
@@ -119,6 +125,7 @@ extern uint8_t make_f_pkt(char *buf, struct ctlr_cfg_t ctlr,
 extern uint8_t make_t_pkt(char *buf, struct ctlr_cfg_t ctlr);
 extern uint8_t make_rp_pkt(char *buf, struct ctlr_cfg_t ctlr);
 extern void read_dle_pkt(char *buf, uint8_t len, struct msg_dle_t *msg);
+extern void reset_data_buf(struct data_buf_t *buf);
 
 #ifdef DEBUG
 extern void print_bytes(char *msg, uint16_t len);

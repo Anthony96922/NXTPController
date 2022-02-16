@@ -170,6 +170,15 @@ void read_dle_pkt(char *buf, uint8_t len, struct msg_dle_t *msg) {
 #endif
 }
 
+/*
+ * reset the data buffer
+ *
+ */
+void reset_data_buf(struct data_buf_t *data_buf) {
+	memset(data_buf->data, 0, BUF_LEN);
+	data_buf->len = 0;
+}
+
 #ifdef DEBUG
 /*
  * output raw data

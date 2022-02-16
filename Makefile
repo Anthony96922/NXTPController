@@ -1,7 +1,7 @@
 
 NAME = nxtpctl
 
-DEBUG = 1
+DEBUG = 0
 
 CC = gcc
 CFLAGS = -std=c11 -O2 -Wall -Wextra -pedantic

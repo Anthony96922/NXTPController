@@ -28,3 +28,7 @@
 #include <unistd.h>
 
 #define VERSION "1.0"
+
+#define BUF_LEN	512
+
+extern void usleep(unsigned int usec);

@@ -18,7 +18,6 @@
  */
 
 #define PORT_SIZE	32
-#define BUF_LEN		512
 
 /* serial port object */
 typedef struct serialport_t {
@@ -35,9 +34,9 @@ typedef struct serialport_t {
 
 extern int8_t serial_open_port(struct serialport_t *port_obj, char *port);
 extern void serial_put_buffer(struct serialport_t *port_obj,
-	char *data, uint16_t len);
+	struct data_buf_t data_buf);
 extern void serial_get_buffer(struct serialport_t *port_obj,
-	char *data, uint16_t *len);
+	struct data_buf_t *data_buf);
 extern int8_t serial_send(struct serialport_t *port_obj);
 extern int8_t serial_receive(struct serialport_t *port_obj);
 extern int8_t serial_close_port(struct serialport_t *port_obj);

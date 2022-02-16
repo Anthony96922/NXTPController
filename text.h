@@ -17,9 +17,15 @@
  *
  */
 
-extern void static_text(struct ctlr_cfg_t ctlr, uint8_t address,
-	char *text, uint8_t seconds, char *out_buf, uint16_t *buf_len);
-extern void scrolling_text(struct ctlr_cfg_t ctlr, uint8_t address,
-	char *text, uint8_t speed, char *out_buf, uint16_t *buf_len);
-extern void reset_sign(struct ctlr_cfg_t ctlr, uint8_t address,
-	char *out_buf, uint16_t *buf_len);
+typedef struct text_fmt_t {
+	uint8_t name;
+	uint8_t value;
+} text_fmt_t;
+
+extern void make_text(struct ctlr_cfg_t ctlr, struct data_buf_t *buf,
+	uint8_t address, char *text);
+extern void make_format_packet(struct ctlr_cfg_t ctlr, struct data_buf_t *buf,
+	struct text_fmt_t fmt);
+extern void make_reset_packet(struct ctlr_cfg_t ctlr, struct data_buf_t *buf,
+	uint8_t address);
+extern void make_trigger_packet(struct ctlr_cfg_t ctlr, struct data_buf_t *buf);
