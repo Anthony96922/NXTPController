@@ -33,8 +33,9 @@ int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 
 	memset(port_obj, 0, sizeof(struct serialport_t));
 	strncpy(port_obj->port, port, PORT_SIZE);
-
 	port_obj->fd = open(port_obj->port, O_RDWR | O_NOCTTY | O_SYNC);
+
+	/* open sesame */
 	if (port_obj->fd < 0) {
 		fprintf(stderr, "(%s): Error opening %s: %d (%s)\n",
 			__func__, port_obj->port, -errno, strerror(errno));
@@ -82,10 +83,9 @@ int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 void serial_put_buffer(struct serialport_t *port_obj,
 	struct data_buf_t data_buf) {
 	/* buffer overflow protection */
-	if (data_buf.len > BUF_LEN) data_buf.len = BUF_LEN;
-
-	memcpy(port_obj->buf, data_buf.data, data_buf.len);
-	port_obj->buf_len = data_buf.len;
+	if (data_buf.len > BUF_LEN) return;
+	memcpy(port_obj->buf + port_obj->buf_len, data_buf.data, data_buf.len);
+	port_obj->buf_len += data_buf.len;
 }
 
 void serial_get_buffer(struct serialport_t *port_obj,

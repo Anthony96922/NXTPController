@@ -19,8 +19,8 @@
 
 #define MAX_PKT_LEN		21
 #define MAX_TEXT_SEG_LEN	12 /* max text length for a packet */
-#define MAX_TEXT_SEGS		13 /* max number of text segments */
-#define MAX_TEXT_LEN		(MAX_TEXT_SEG_LEN * MAX_TEXT_SEGS) /* 156 */
+#define MAX_TEXT_SEGS		15 /* max number of text segments */
+#define MAX_TEXT_LEN		(MAX_TEXT_SEG_LEN * MAX_TEXT_SEGS) /* 180 */
 
 /* sign controller configuration */
 typedef struct ctlr_cfg_t {

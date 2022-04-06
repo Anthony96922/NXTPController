@@ -26,7 +26,7 @@ static uint8_t get_num_segs(uint8_t len) {
 	uint8_t k = 0;
 	uint8_t segments = 0;
 
-	for (uint16_t i = 0; i < len; i++) {
+	for (uint8_t i = 0; i < len; i++) {
 		if (++k == MAX_TEXT_SEG_LEN) {
 			segments++;
 			k = 0;
@@ -132,7 +132,6 @@ void make_reset_packet(struct ctlr_cfg_t ctlr, struct data_buf_t *buf,
  *
  */
 void make_trigger_packet(struct ctlr_cfg_t ctlr, struct data_buf_t *buf) {
-
 	buf->len = make_t_pkt(buf->data, ctlr);
 
 #ifdef DEBUG

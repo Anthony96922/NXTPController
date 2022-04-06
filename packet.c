@@ -156,7 +156,7 @@ void read_dle_pkt(char *buf, uint8_t len, struct msg_dle_t *msg) {
 #ifdef DEBUG
 	printf("(%s): %u %u %u"
 		" %u %u %u"
-		" '%c' %u 0x%02x 0x%02x 0x%02x '%c' 0x%02x\n",
+		" '%c' %u %02x %02x %02x '%c' %02x\n",
 		__func__,
 		msg->sign_mid, msg->ext_pid, msg->pid, msg->mid,
 		msg->len,
@@ -190,7 +190,7 @@ void print_bytes(char *msg, uint16_t len) {
 		if (msg[i] >= 0x20 && msg[i] <= 0x7e) {
 			printf(" '%c'", msg[i]);
 		} else {
-			printf(" 0x%02x", msg[i]);
+			printf(" %02x", msg[i]);
 		}
 	}
 	printf("\n");

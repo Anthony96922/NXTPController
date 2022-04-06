@@ -1,18 +1,20 @@
 
 NAME = nxtpctl
-
-DEBUG = 0
-
+DEBUG ?= 0
 CC = gcc
-CFLAGS = -std=c11 -O2 -Wall -Wextra -pedantic
+CFLAGS = -std=c11 -Wall -Wextra -pedantic
+OFLAGS =
 
 ifeq ($(DEBUG), 1)
-	CFLAGS += -DDEBUG
+	CFLAGS += -g -DDEBUG
+else
+	CFLAGS += -O2
+	OFLAGS += -s
 endif
 
-objs = $(NAME).o packet.o serial.o text.o
+objs = nxtpctl.o packet.o serial.o text.o
 
 $(NAME): $(objs)
-	$(CC) $(objs) -o $(NAME) -s
+	$(CC) $(objs) $(OFLAGS) -o $(NAME)
 clean:
 	rm -f *.o
