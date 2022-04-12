@@ -33,9 +33,9 @@ int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 
 	memset(port_obj, 0, sizeof(struct serialport_t));
 	strncpy(port_obj->port, port, PORT_SIZE);
-	port_obj->fd = open(port_obj->port, O_RDWR | O_NOCTTY | O_SYNC);
 
 	/* open sesame */
+	port_obj->fd = open(port_obj->port, O_RDWR | O_NOCTTY | O_SYNC);
 	if (port_obj->fd < 0) {
 		fprintf(stderr, "(%s): Error opening %s: %d (%s)\n",
 			__func__, port_obj->port, -errno, strerror(errno));
@@ -84,7 +84,8 @@ void serial_put_buffer(struct serialport_t *port_obj,
 	struct data_buf_t data_buf) {
 	/* buffer overflow protection */
 	if (data_buf.len > BUF_LEN) return;
-	memcpy(port_obj->buf + port_obj->buf_len, data_buf.data, data_buf.len);
+	memcpy(port_obj->buf + port_obj->buf_len,
+		data_buf.data, data_buf.len);
 	port_obj->buf_len += data_buf.len;
 }
 
@@ -118,13 +119,14 @@ int8_t serial_send(struct serialport_t *port_obj) {
 		fprintf(stderr, "(%s): Couldn't send: %d (%s)\n",
 			__func__, -errno, strerror(errno));
 		return -1;
-	} else {
-		/* wait for sending to finish */
-		tcdrain(port_obj->fd);
-		/* reset internal buffer when done */
-		serial_reset_buffer(port_obj);
-		return 1;
 	}
+
+	/* wait for sending to finish */
+	tcdrain(port_obj->fd);
+	/* reset internal buffer when done */
+	serial_reset_buffer(port_obj);
+
+	return 1;
 }
 
 int8_t serial_receive(struct serialport_t *port_obj) {
@@ -139,19 +141,21 @@ int8_t serial_receive(struct serialport_t *port_obj) {
 		fprintf(stderr, "(%s): Couldn't receive: %d (%s)\n",
 			__func__, -errno, strerror(errno));
 		return -1;
-	} else {
-		/* set actual number of bytes when done */
-		port_obj->buf_len = ret;
-		return 1;
 	}
+
+	/* set actual number of bytes when done */
+	port_obj->buf_len = ret;
+
+	return 1;
 }
 
 int8_t serial_close_port(struct serialport_t *port_obj) {
+
 	if (close(port_obj->fd) < 0) {
 		fprintf(stderr, "(%s): Error closing %s: %d (%s)\n",
 			__func__, port_obj->port, -errno, strerror(errno));
 		return -1;
-	} else {
-		return 1;
 	}
+
+	return 1;
 }

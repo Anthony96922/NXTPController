@@ -24,21 +24,21 @@
 
 #define DEFAULT_PORT	"/dev/ttyUSB0"
 
+#define MAX_ADDRESSES	10
+#define MAX_FORMAT_OPTS	10
+
 static void show_help(char *name) {
 	fprintf(stderr,
 		"Sunrise Systems NXTP Sign Controller v" VERSION "\n"
 		"\n"
-		"Usage: %s\n"
-		"\t[ -p port ] [ -a address|addr1,addr2 ]\n"
-		"\t-t text [ -f fmt-name,fmt-value ... ]\n"
+		"Usage: %s -t text [ -p port ] [ -a address ... ]\n"
+		"\t[ -f fmt-name,fmt-value ... ]\n"
 		"\n"
 		"\t-p port\t\t\tUART port to use (default: \"%s\")\n"
 		"\t-a address\t\tAddress of one or more signs\n"
 		"\t-t text\t\t\tText string to use\n"
-		"\t-f name,value\t\tFormat name and value\n"
-		"\t-c mid,extPid,pid\tController configuration\n"
-		"\n"
-		"\t-r\t\t\tRailroad X-ing mode\n"
+		"\t-f name,value\t\tOne or more format name and value pairs\n"
+		"\t-c mid,extPid,pid\tJ1587 controller configuration\n"
 		"\n"
 		"\t-h\t\t\tShow this help and exit\n"
 		"\t-v\t\t\tShow version and exit\n"
@@ -49,16 +49,25 @@ static void show_help(char *name) {
 int main(int argc, char *argv[]) {
 	int opt;
 	char text[MAX_TEXT_LEN + 1] = {0};
-	struct data_buf_t data_buf;
 	char port[PORT_SIZE] = {0};
-	struct serialport_t my_port;
-	struct ctlr_cfg_t my_ctlr;
-	uint8_t address[2] = {0}; /* default to all signs */
-	struct text_fmt_t fmt[5];
-	uint8_t fmt_idx = 0;
-	uint8_t rrxing = 0;
 
-	const char *short_opt = "p:a:t:c:rhv";
+	/* serial data buffer */
+	struct data_buf_t data_buf;
+
+	struct serialport_t my_port;
+
+	/* sign controller configuration */
+	struct ctlr_cfg_t my_ctlr;
+
+	/* store multiple sign addresses */
+	uint8_t address[MAX_ADDRESSES] = {0}; /* default to all signs */
+	uint8_t addr_idx = 0;
+
+	/* store multiple format options */
+	struct text_fmt_t fmt[MAX_FORMAT_OPTS];
+	uint8_t fmt_idx = 0;
+
+	const char *short_opt = "p:a:t:f:c:rhv";
 	const struct option long_opt[] = {
 		{"port",	required_argument,	NULL,	'p'},
 		{"address",	required_argument,	NULL,	'a'},
@@ -67,7 +76,7 @@ int main(int argc, char *argv[]) {
 		{"ctlr",	required_argument,	NULL,	'c'},
 
 		/* preset functions */
-		{"rrxing", 	no_argument,		NULL,	'r'},
+		/* (none) */
 
 		{"help",	no_argument,		NULL,	'h'},
 		{"version",	no_argument,		NULL,	'v'},
@@ -77,92 +86,90 @@ int main(int argc, char *argv[]) {
 	/* default sign controller configuration */
 	set_ctlr_config(&my_ctlr, 195, 255, 245);
 
-	while ((opt = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1)
-	{
-		switch (opt) {
-			case 'p':
-				strncpy(port, optarg, PORT_SIZE - 1);
-				printf("Using serial port \"%s\".\n", port);
-				break;
+keep_parsing_opts:
+	opt = getopt_long(argc, argv, short_opt, long_opt, NULL);
+	if (opt == -1) goto done_parsing_opts;
 
-			case 'a':
-				if (sscanf(optarg, "%hhu,%hhu",
-					&address[0], &address[1]) == 2) {
-					printf("Configured addresses %u and %u"
-						" for railroad crossing"
-						" mode.\n",
-						address[0], address[1]);
-				} else {
-					address[0] = strtoul(optarg, NULL, 16);
-					printf("Using address %u.\n",
-						address[0]);
-				}
-				break;
+	switch (opt) {
+		case 'p':
+			strncpy(port, optarg, PORT_SIZE - 1);
+			printf("Using serial port \"%s\".\n", port);
+			break;
 
-			case 't':
-				strncpy(text, optarg, MAX_TEXT_LEN);
-				printf("Using text \"%s\".\n", text);
-				break;
+		case 'a':
+			if (addr_idx < MAX_ADDRESSES) {
+				address[addr_idx] =
+					strtoul(optarg, NULL, 10);
+				printf("Using sign address %u.\n",
+					address[addr_idx++]);
+			} else {
+				fprintf(stderr,
+					"Too many addresses.\n");
+			}
+			break;
 
-			case 'f':
+		case 't':
+			strncpy(text, optarg, MAX_TEXT_LEN);
+			printf("Using text \"%s\".\n", text);
+			break;
+
+		case 'f':
+			/* text format options */
+			if (fmt_idx < MAX_FORMAT_OPTS) {
 				if (sscanf(optarg, "%c,%hhu",
 					&fmt[fmt_idx].name,
 					&fmt[fmt_idx].value) == 2) {
 					printf("Using format '%c' = %u.\n",
 						fmt[fmt_idx].name,
 						fmt[fmt_idx].value);
-					if (fmt_idx < 5) fmt_idx++;
 				} else if (sscanf(optarg, "%c,%c",
 					&fmt[fmt_idx].name,
 					&fmt[fmt_idx].value) == 2) {
 					printf("Using format '%c' = '%c'.\n",
 						fmt[fmt_idx].name,
 						fmt[fmt_idx].value);
-					if (fmt_idx < 5) fmt_idx++;
 				} else {
 					printf("Invalid format syntax.\n");
 				}
-				break;
+			} else {
+				fprintf(stderr, "Too many format options.\n");
+			}
+			break;
 
-			case 'c':
-				/* sign controller configuration */
-				if (sscanf(optarg, "%hhu,%hhu,%hhu",
-					&my_ctlr.mid,
-					&my_ctlr.ext_pid,
-					&my_ctlr.pid) == 3) {
-					printf("Using controller configuration"
-						" %u/%u/%u.\n",
-						my_ctlr.mid,
-						my_ctlr.ext_pid,
-						my_ctlr.pid);
-				} else {
-					printf("Invalid controller config"
-						" syntax.\n");
-				}
-				break;
+		case 'c':
+			/* sign controller configuration */
+			if (sscanf(optarg, "%hhu,%hhu,%hhu",
+				&my_ctlr.mid,
+				&my_ctlr.ext_pid,
+				&my_ctlr.pid) == 3) {
+				printf("Using controller configuration"
+					" %u/%u/%u.\n",
+					my_ctlr.mid, my_ctlr.ext_pid,
+					my_ctlr.pid);
+			} else {
+				fprintf(stderr,
+					"Invalid controller config syntax.\n");
+			}
+			break;
 
-			case 'r':
-				if (address[0] && address[1]) {
-					rrxing++;
-					printf("Activated railroad"
-						" crossing mode.\n");
-				} else {
-					printf("Please specify 2 sign"
-						" addresses to enable"
-						" RR x-ing mode.\n");
-					return 1;
-				}
-				break;
+		case 'v':
+			printf("version " VERSION "\n");
+			return 0;
 
-			case 'v':
-				printf(VERSION "\n");
-				return 0;
+		case 'h':
+		default:
+			show_help(argv[0]);
+			return 1;
+	}
 
-			case 'h':
-			default:
-				show_help(argv[0]);
-				return 1;
-		}
+	goto keep_parsing_opts;
+
+done_parsing_opts:
+
+	if (!text[0]) {
+		fprintf(stderr, "No text specified.\n\n");
+		show_help(argv[0]);
+		return 1;
 	}
 
 	if (!port[0]) {
@@ -173,46 +180,21 @@ int main(int argc, char *argv[]) {
 	/* open the serial port (9600 8n1) */
 	if (serial_open_port(&my_port, port) < 0) return 1;
 
-	if (rrxing) {
-		/* reset the signs to get them ready */
-		for (uint8_t j = 0; j < 2; j++) {
-			make_reset_packet(my_ctlr, &data_buf, address[j]);
-			serial_put_buffer(&my_port, data_buf);
-			serial_send(&my_port);
-			reset_data_buf(&data_buf);
-
-			make_text(my_ctlr, &data_buf, address[j],
-					j ?
-					/* for alternating between halves */
-					"^Y12^W5^Y13^W5^R" :
-					"^Y13^W5^Y12^W5^R"
-			);
-			serial_put_buffer(&my_port, data_buf);
-
-			make_trigger_packet(my_ctlr, &data_buf);
-			serial_put_buffer(&my_port, data_buf);
-			serial_send(&my_port);
-			reset_data_buf(&data_buf);
-		}
-
-		goto exit;
-	}
-
-	if (text[0]) {
+	for (uint8_t i = 0; i < addr_idx; i++) {
 		/* reset the sign */
-		make_reset_packet(my_ctlr, &data_buf, address[0]);
+		make_reset_packet(my_ctlr, &data_buf, address[i]);
 		serial_put_buffer(&my_port, data_buf);
 		serial_send(&my_port);
 		reset_data_buf(&data_buf);
 
 		/* send text packets */
 		make_text(my_ctlr, &data_buf,
-			address[0], text);
+			address[i], text);
 		serial_put_buffer(&my_port, data_buf);
 
 		/* send optional format packets */
-		for (uint8_t i = 0; i < fmt_idx; i++) {
-			make_format_packet(my_ctlr, &data_buf, fmt[i]);
+		for (uint8_t j = 0; j < fmt_idx; j++) {
+			make_format_packet(my_ctlr, &data_buf, fmt[j]);
 			serial_put_buffer(&my_port, data_buf);
 		}
 
@@ -223,7 +205,6 @@ int main(int argc, char *argv[]) {
 		reset_data_buf(&data_buf);
 	}
 
-exit:
 	serial_close_port(&my_port);
 
 	return 0;
