@@ -32,13 +32,14 @@ static void show_help(char *name) {
 		"Sunrise Systems NXTP Sign Controller v" VERSION "\n"
 		"\n"
 		"Usage: %s -t text [ -p port ] [ -a address ... ]\n"
-		"\t[ -f fmt-name,fmt-value ... ]\n"
+		"\t[ -f fmt-name,fmt-value ... ] [ -c mid,extPid,pid ]\n"
 		"\n"
 		"\t-p port\t\t\tUART port to use (default: \"%s\")\n"
 		"\t-a address\t\tAddress of one or more signs\n"
 		"\t-t text\t\t\tText string to use\n"
 		"\t-f name,value\t\tOne or more format name and value pairs\n"
 		"\t-c mid,extPid,pid\tJ1587 controller configuration\n"
+		"\t-r\t\t\tReset signs before new sending new data\n"
 		"\n"
 		"\t-h\t\t\tShow this help and exit\n"
 		"\t-v\t\t\tShow version and exit\n"
@@ -67,6 +68,9 @@ int main(int argc, char *argv[]) {
 	struct text_fmt_t fmt[MAX_FORMAT_OPTS];
 	uint8_t fmt_idx = 0;
 
+	/* reset signs if desired */
+	uint8_t reset = 0;
+
 	const char *short_opt = "p:a:t:f:c:rhv";
 	const struct option long_opt[] = {
 		{"port",	required_argument,	NULL,	'p'},
@@ -74,6 +78,7 @@ int main(int argc, char *argv[]) {
 		{"text",	required_argument,	NULL,	't'},
 		{"format",	required_argument,	NULL,	'f'},
 		{"ctlr",	required_argument,	NULL,	'c'},
+		{"reset",	no_argument,		NULL,	'r'},
 
 		/* preset functions */
 		/* (none) */
@@ -87,6 +92,7 @@ int main(int argc, char *argv[]) {
 	set_ctlr_config(&my_ctlr, 195, 255, 245);
 
 keep_parsing_opts:
+
 	opt = getopt_long(argc, argv, short_opt, long_opt, NULL);
 	if (opt == -1) goto done_parsing_opts;
 
@@ -105,6 +111,7 @@ keep_parsing_opts:
 			} else {
 				fprintf(stderr,
 					"Too many addresses.\n");
+				return 1;
 			}
 			break;
 
@@ -133,6 +140,7 @@ keep_parsing_opts:
 				}
 			} else {
 				fprintf(stderr, "Too many format options.\n");
+				return 1;
 			}
 			break;
 
@@ -149,7 +157,12 @@ keep_parsing_opts:
 			} else {
 				fprintf(stderr,
 					"Invalid controller config syntax.\n");
+				return 1;
 			}
+			break;
+
+		case 'r':
+			reset = 1;
 			break;
 
 		case 'v':
@@ -177,15 +190,22 @@ done_parsing_opts:
 		printf("Using default port \"%s\".\n", port);
 	}
 
+	if (!addr_idx) {
+		printf("Broadcasting to all signs.\n");
+		addr_idx = 1;
+	}
+
 	/* open the serial port (9600 8n1) */
 	if (serial_open_port(&my_port, port) < 0) return 1;
 
 	for (uint8_t i = 0; i < addr_idx; i++) {
 		/* reset the sign */
-		make_reset_packet(my_ctlr, &data_buf, address[i]);
-		serial_put_buffer(&my_port, data_buf);
-		serial_send(&my_port);
-		reset_data_buf(&data_buf);
+		if (reset) {
+			make_reset_packet(my_ctlr, &data_buf, address[i]);
+			serial_put_buffer(&my_port, data_buf);
+			serial_send(&my_port);
+			reset_data_buf(&data_buf);
+		}
 
 		/* send text packets */
 		make_text(my_ctlr, &data_buf,
