@@ -26,6 +26,9 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <time.h>
+#include <signal.h>
+#include <pthread.h>
 
 #define VERSION "1.0.0"
 

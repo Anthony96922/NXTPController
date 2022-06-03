@@ -98,7 +98,7 @@ void make_format_packet(struct ctlr_cfg_t ctlr, struct data_buf_t *buf,
 	struct text_fmt_t fmt) {
 
 	/* create the F packet */
-	buf->len = make_f_pkt(buf->data + buf->len, ctlr,
+	buf->len = make_f_pkt(buf->data, ctlr,
 				fmt.name, fmt.value);
 
 #ifdef DEBUG

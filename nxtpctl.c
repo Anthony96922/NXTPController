@@ -27,6 +27,24 @@
 #define MAX_ADDRESSES	10
 #define MAX_FORMAT_OPTS	10
 
+typedef struct signctl_obj_t {
+	uint8_t address;
+	struct ctlr_cfg_t *ctlr;
+	struct data_buf_t *data;
+	struct serialport_t *port;
+} signctl_obj_t;
+
+/* needed to work around implicit declaration */
+extern int nanosleep(const struct timespec *req, struct timespec *rem);
+
+/* millisecond sleep */
+static void msleep(unsigned int ms) {
+	struct timespec ts;
+	ts.tv_sec = ms / 1000u;			/* whole seconds */
+	ts.tv_nsec = (ms % 1000u) * 1000000;	/* remainder, in nanoseconds */
+	nanosleep(&ts, NULL);
+}
+
 static void show_help(char *name) {
 	fprintf(stderr,
 		"Sunrise Systems NXTP Sign Controller v" VERSION "\n"
@@ -40,11 +58,56 @@ static void show_help(char *name) {
 		"\t-f name,value\t\tOne or more format name and value pairs\n"
 		"\t-c mid,extPid,pid\tJ1587 controller configuration\n"
 		"\t-r\t\t\tReset signs before new sending new data\n"
+		"\t-l\t\t\tClock mode"
 		"\n"
 		"\t-h\t\t\tShow this help and exit\n"
 		"\t-v\t\t\tShow version and exit\n"
 		"\n",
 	name, DEFAULT_PORT);
+}
+
+static uint8_t shutdown;
+
+static void *clock_worker(void *arg) {
+	char text[14];
+	struct tm utc;
+	time_t now;
+	int8_t minutes = -1;
+
+	struct signctl_obj_t *local_obj = (struct signctl_obj_t *)arg;
+	struct ctlr_cfg_t local_ctlr = *local_obj->ctlr;
+	struct data_buf_t local_data_buf = *local_obj->data;
+	struct serialport_t local_port = *local_obj->port;
+
+	memset(&utc, 0, sizeof(struct tm));
+
+	while (!shutdown) {
+		/* check time */
+		now = time(NULL);
+		memcpy(&utc, gmtime(&now), sizeof(struct tm));
+
+		if (utc.tm_min != minutes) {
+			/* send text packets */
+			sprintf(text, "%02u:%02u UTC",
+				utc.tm_hour, utc.tm_min);
+			make_text(local_ctlr, &local_data_buf,
+				local_obj->address, text);
+			serial_put_buffer(&local_port, local_data_buf);
+			make_trigger_packet(local_ctlr, &local_data_buf);
+			serial_put_buffer(&local_port, local_data_buf);
+			serial_send(&local_port);
+			reset_data_buf(&local_data_buf);
+			/* update minute counter */
+			minutes = utc.tm_min;
+		}
+		msleep(100);
+	}
+
+	pthread_exit(NULL);
+}
+
+static void exit_clock() {
+	shutdown = 1;
 }
 
 int main(int argc, char *argv[]) {
@@ -71,13 +134,23 @@ int main(int argc, char *argv[]) {
 	/* reset signs if desired */
 	uint8_t reset = 0;
 
-	const char *short_opt = "p:a:t:f:c:rhv";
+	uint8_t clock_mode = 0;
+	pthread_t clock_thread;
+	pthread_attr_t attr;
+
+	struct signctl_obj_t clock_obj;
+
+	signal(SIGINT, exit_clock);
+	signal(SIGTERM, exit_clock);
+
+	const char *short_opt = "p:a:t:f:c:lrhv";
 	const struct option long_opt[] = {
 		{"port",	required_argument,	NULL,	'p'},
 		{"address",	required_argument,	NULL,	'a'},
 		{"text",	required_argument,	NULL,	't'},
 		{"format",	required_argument,	NULL,	'f'},
 		{"ctlr",	required_argument,	NULL,	'c'},
+		{"clock",	no_argument,		NULL,	'l'},
 		{"reset",	no_argument,		NULL,	'r'},
 
 		/* preset functions */
@@ -129,12 +202,14 @@ keep_parsing_opts:
 					printf("Using format '%c' = %u.\n",
 						fmt[fmt_idx].name,
 						fmt[fmt_idx].value);
+					fmt_idx++;
 				} else if (sscanf(optarg, "%c,%c",
 					&fmt[fmt_idx].name,
 					&fmt[fmt_idx].value) == 2) {
 					printf("Using format '%c' = '%c'.\n",
 						fmt[fmt_idx].name,
 						fmt[fmt_idx].value);
+					fmt_idx++;
 				} else {
 					printf("Invalid format syntax.\n");
 				}
@@ -161,6 +236,11 @@ keep_parsing_opts:
 			}
 			break;
 
+		case 'l':
+			printf("Enabling clock mode.\n");
+			clock_mode = 1;
+			break;
+
 		case 'r':
 			reset = 1;
 			break;
@@ -179,7 +259,7 @@ keep_parsing_opts:
 
 done_parsing_opts:
 
-	if (!text[0]) {
+	if (!text[0] && !clock_mode) {
 		fprintf(stderr, "No text specified.\n\n");
 		show_help(argv[0]);
 		return 1;
@@ -198,31 +278,52 @@ done_parsing_opts:
 	/* open the serial port (9600 8n1) */
 	if (serial_open_port(&my_port, port) < 0) return 1;
 
-	for (uint8_t i = 0; i < addr_idx; i++) {
-		/* reset the sign */
-		if (reset) {
-			make_reset_packet(my_ctlr, &data_buf, address[i]);
+	if (clock_mode) {
+		clock_obj.address = address[0];
+		clock_obj.ctlr = &my_ctlr;
+		clock_obj.data = &data_buf;
+		clock_obj.port = &my_port;
+
+		pthread_attr_init(&attr);
+		if (pthread_create(&clock_thread, &attr, clock_worker, (void *)&clock_obj) < 0)
+			fprintf(stderr, "Could not start thread.\n");
+
+		pthread_attr_destroy(&attr);
+
+		while (1) {
+			if (shutdown) break;
+			msleep(100);
+		}
+
+		pthread_join(clock_thread, NULL);
+	} else {
+		for (uint8_t i = 0; i < addr_idx; i++) {
+			/* reset the sign */
+			if (reset) {
+				make_reset_packet(my_ctlr, &data_buf,
+					address[i]);
+				serial_put_buffer(&my_port, data_buf);
+				serial_send(&my_port);
+				reset_data_buf(&data_buf);
+			}
+
+			/* send text packets */
+			make_text(my_ctlr, &data_buf,
+				address[i], text);
+			serial_put_buffer(&my_port, data_buf);
+
+			/* send optional format packets */
+			for (uint8_t j = 0; j < fmt_idx; j++) {
+				make_format_packet(my_ctlr, &data_buf, fmt[j]);
+				serial_put_buffer(&my_port, data_buf);
+			}
+
+			/* send trigger packet */
+			make_trigger_packet(my_ctlr, &data_buf);
 			serial_put_buffer(&my_port, data_buf);
 			serial_send(&my_port);
 			reset_data_buf(&data_buf);
 		}
-
-		/* send text packets */
-		make_text(my_ctlr, &data_buf,
-			address[i], text);
-		serial_put_buffer(&my_port, data_buf);
-
-		/* send optional format packets */
-		for (uint8_t j = 0; j < fmt_idx; j++) {
-			make_format_packet(my_ctlr, &data_buf, fmt[j]);
-			serial_put_buffer(&my_port, data_buf);
-		}
-
-		/* send trigger packet */
-		make_trigger_packet(my_ctlr, &data_buf);
-		serial_put_buffer(&my_port, data_buf);
-		serial_send(&my_port);
-		reset_data_buf(&data_buf);
 	}
 
 	serial_close_port(&my_port);

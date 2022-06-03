@@ -15,6 +15,6 @@ endif
 objs = nxtpctl.o packet.o serial.o text.o
 
 $(NAME): $(objs)
-	$(CC) $(objs) $(OFLAGS) -o $(NAME)
+	$(CC) $(objs) $(OFLAGS) -o $(NAME) -pthread
 clean:
 	rm -f *.o
