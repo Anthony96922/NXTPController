@@ -58,7 +58,7 @@ static void show_help(char *name) {
 		"\t-f name,value\t\tOne or more format name and value pairs\n"
 		"\t-c mid,extPid,pid\tJ1587 controller configuration\n"
 		"\t-r\t\t\tReset signs before new sending new data\n"
-		"\t-l\t\t\tClock mode"
+		"\t-l\t\t\tUTC clock mode"
 		"\n"
 		"\t-h\t\t\tShow this help and exit\n"
 		"\t-v\t\t\tShow version and exit\n"
@@ -69,27 +69,44 @@ static void show_help(char *name) {
 static uint8_t shutdown;
 
 static void *clock_worker(void *arg) {
-	char text[14];
+	char text[32];
 	struct tm utc;
 	time_t now;
-	int8_t minutes = -1;
+	int8_t cur_seconds = -1;
+	char *time_str;
 
 	struct signctl_obj_t *local_obj = (struct signctl_obj_t *)arg;
 	struct ctlr_cfg_t local_ctlr = *local_obj->ctlr;
 	struct data_buf_t local_data_buf = *local_obj->data;
 	struct serialport_t local_port = *local_obj->port;
 
-	memset(&utc, 0, sizeof(struct tm));
+	/* make it dim for nighttime */
+	make_text(local_ctlr, &local_data_buf, local_obj->address, "^XB2");
+	serial_put_buffer(&local_port, local_data_buf);
+	make_trigger_packet(local_ctlr, &local_data_buf);
+	serial_put_buffer(&local_port, local_data_buf);
+	serial_send(&local_port);
+	reset_data_buf(&local_data_buf);
 
 	while (!shutdown) {
 		/* check time */
 		now = time(NULL);
 		memcpy(&utc, gmtime(&now), sizeof(struct tm));
 
-		if (utc.tm_min != minutes) {
+		/* did the seconds change? */
+		if (utc.tm_sec != cur_seconds) {
+			/* no colons on odd seconds */
+			if (cur_seconds & 1) {
+				time_str = "%02u %02u %02u UTC";
+			} else {
+				time_str = "%02u:%02u:%02u UTC";
+			}
+
+			/* create the complete time string */
+			sprintf(text, time_str,
+				utc.tm_hour, utc.tm_min, utc.tm_sec);
+
 			/* send text packets */
-			sprintf(text, "%02u:%02u UTC",
-				utc.tm_hour, utc.tm_min);
 			make_text(local_ctlr, &local_data_buf,
 				local_obj->address, text);
 			serial_put_buffer(&local_port, local_data_buf);
@@ -97,11 +114,22 @@ static void *clock_worker(void *arg) {
 			serial_put_buffer(&local_port, local_data_buf);
 			serial_send(&local_port);
 			reset_data_buf(&local_data_buf);
-			/* update minute counter */
-			minutes = utc.tm_min;
+
+			/* update seconds counter */
+			cur_seconds = utc.tm_sec;
 		}
-		msleep(100);
+
+		/* wait 10 ms before polling again */
+		msleep(10);
 	}
+
+	/* clear the sign upon shutdown */
+	make_text(local_ctlr, &local_data_buf, local_obj->address, " ");
+	serial_put_buffer(&local_port, local_data_buf);
+	make_trigger_packet(local_ctlr, &local_data_buf);
+	serial_put_buffer(&local_port, local_data_buf);
+	serial_send(&local_port);
+	reset_data_buf(&local_data_buf);
 
 	pthread_exit(NULL);
 }
@@ -285,14 +313,14 @@ done_parsing_opts:
 		clock_obj.port = &my_port;
 
 		pthread_attr_init(&attr);
-		if (pthread_create(&clock_thread, &attr, clock_worker, (void *)&clock_obj) < 0)
+		if (pthread_create(&clock_thread, &attr, clock_worker,
+			(void *)&clock_obj) < 0)
 			fprintf(stderr, "Could not start thread.\n");
-
 		pthread_attr_destroy(&attr);
 
 		while (1) {
 			if (shutdown) break;
-			msleep(100);
+			msleep(1000);
 		}
 
 		pthread_join(clock_thread, NULL);
