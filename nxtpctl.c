@@ -70,7 +70,7 @@ static uint8_t shutdown;
 
 static void *clock_worker(void *arg) {
 	char text[32];
-	struct tm utc;
+	struct tm *utc;
 	time_t now;
 	int8_t cur_seconds = -1;
 	char *time_str;
@@ -91,10 +91,10 @@ static void *clock_worker(void *arg) {
 	while (!shutdown) {
 		/* check time */
 		now = time(NULL);
-		memcpy(&utc, gmtime(&now), sizeof(struct tm));
+		utc = gmtime(&now);
 
 		/* did the seconds change? */
-		if (utc.tm_sec != cur_seconds) {
+		if (utc->tm_sec != cur_seconds) {
 			/* no colons on odd seconds */
 			if (cur_seconds & 1) {
 				time_str = "%02u %02u %02u UTC";
@@ -104,9 +104,9 @@ static void *clock_worker(void *arg) {
 
 			/* create the complete time string */
 			sprintf(text, time_str,
-				utc.tm_hour, utc.tm_min, utc.tm_sec);
+				utc->tm_hour, utc->tm_min, utc->tm_sec);
 
-			/* send text packets */
+			/* send it */
 			make_text(local_ctlr, &local_data_buf,
 				local_obj->address, text);
 			serial_put_buffer(&local_port, local_data_buf);
@@ -116,7 +116,7 @@ static void *clock_worker(void *arg) {
 			reset_data_buf(&local_data_buf);
 
 			/* update seconds counter */
-			cur_seconds = utc.tm_sec;
+			cur_seconds = utc->tm_sec;
 		}
 
 		/* wait 10 ms before polling again */
