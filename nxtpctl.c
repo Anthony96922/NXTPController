@@ -37,11 +37,11 @@ typedef struct signctl_obj_t {
 /* needed to work around implicit declaration */
 extern int nanosleep(const struct timespec *req, struct timespec *rem);
 
-/* millisecond sleep */
-static void msleep(unsigned int ms) {
+/* nanosecond sleep */
+static void nsleep(unsigned int ns) {
 	struct timespec ts;
-	ts.tv_sec = ms / 1000u;			/* whole seconds */
-	ts.tv_nsec = (ms % 1000u) * 1000000;	/* remainder, in nanoseconds */
+	ts.tv_sec = 0;
+	ts.tv_nsec = ns;
 	nanosleep(&ts, NULL);
 }
 
@@ -119,8 +119,8 @@ static void *clock_worker(void *arg) {
 			cur_seconds = utc->tm_sec;
 		}
 
-		/* wait 10 ms before polling again */
-		msleep(10);
+		/* wait 1 ms before polling again */
+		nsleep(1000);
 	}
 
 	/* clear the sign upon shutdown */
@@ -320,7 +320,7 @@ done_parsing_opts:
 
 		while (1) {
 			if (shutdown) break;
-			msleep(1000);
+			nsleep(1000);
 		}
 
 		pthread_join(clock_thread, NULL);
