@@ -32,7 +32,7 @@ int8_t serial_open_port(struct serialport_t *port_obj, char *port) {
 	struct termios tty;
 
 	memset(port_obj, 0, sizeof(struct serialport_t));
-	strncpy(port_obj->port, port, PORT_SIZE);
+	strncpy(port_obj->port, port, PORT_SIZE - 1);
 
 	/* open sesame */
 	port_obj->fd = open(port_obj->port, O_RDWR | O_NOCTTY | O_SYNC);
