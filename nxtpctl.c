@@ -32,6 +32,7 @@ typedef struct signctl_obj_t {
 	struct ctlr_cfg_t *ctlr;
 	struct data_buf_t *data;
 	struct serialport_t *port;
+	struct tm countdown_date;
 } signctl_obj_t;
 
 /* needed to work around implicit declaration */
@@ -58,7 +59,9 @@ static void show_help(char *name) {
 		"\t-f name,value\t\tOne or more format name and value pairs\n"
 		"\t-c mid,extPid,pid\tJ1587 controller configuration\n"
 		"\t-r\t\t\tReset signs before new sending new data\n"
-		"\t-l\t\t\tUTC clock mode"
+		"\t-l\t\t\tUTC clock mode\n"
+		"\t-d yyyy/mm/dd hh:mm\tWhen -l is used, countdown to given\n"
+		"\t\t\t\tdate in T-x format on another sign (address + 1)\n"
 		"\n"
 		"\t-h\t\t\tShow this help and exit\n"
 		"\t-v\t\t\tShow version and exit\n"
@@ -72,6 +75,8 @@ static void *clock_worker(void *arg) {
 	char text[32];
 	struct tm *utc;
 	time_t now;
+	time_t countdown_secs = 0;
+	time_t time_left = 1;
 	int8_t cur_seconds = -1;
 	char *time_str;
 
@@ -80,13 +85,14 @@ static void *clock_worker(void *arg) {
 	struct data_buf_t local_data_buf = *local_obj->data;
 	struct serialport_t local_port = *local_obj->port;
 
-	/* make it dim for nighttime */
-	make_text(local_ctlr, &local_data_buf, local_obj->address, "^XB2");
-	serial_put_buffer(&local_port, local_data_buf);
-	make_trigger_packet(local_ctlr, &local_data_buf);
-	serial_put_buffer(&local_port, local_data_buf);
-	serial_send(&local_port);
-	reset_data_buf(&local_data_buf);
+	if (local_obj->countdown_date.tm_year) {
+		local_obj->countdown_date.tm_year -= 1900;
+		local_obj->countdown_date.tm_mon -= 1;
+		local_obj->countdown_date.tm_isdst = -1;
+
+		/* get seconds of countdown date */
+		countdown_secs = mktime(&local_obj->countdown_date);
+	}
 
 	while (!shutdown) {
 		/* check time */
@@ -97,9 +103,9 @@ static void *clock_worker(void *arg) {
 		if (utc->tm_sec != cur_seconds) {
 			/* no colons on odd seconds */
 			if (cur_seconds & 1) {
-				time_str = "%02u %02u %02u UTC";
+				time_str = "^XB2^II%02u %02u %02u UTC";
 			} else {
-				time_str = "%02u:%02u:%02u UTC";
+				time_str = "^XB2^II%02u:%02u:%02u UTC";
 			}
 
 			/* create the complete time string */
@@ -110,6 +116,23 @@ static void *clock_worker(void *arg) {
 			make_text(local_ctlr, &local_data_buf,
 				local_obj->address, text);
 			serial_put_buffer(&local_port, local_data_buf);
+
+			if (local_obj->countdown_date.tm_year) {
+				if (now < countdown_secs) {
+					time_left = countdown_secs - now;
+					time_str = "^XB2^IIT-%lu ";
+				} else {
+					time_left = now - countdown_secs;
+					time_str = "^XB2^IIT+%lu ";
+				}
+
+				sprintf(text, time_str, time_left);
+
+				make_text(local_ctlr, &local_data_buf,
+					local_obj->address + 1, text);
+				serial_put_buffer(&local_port, local_data_buf);
+			}
+
 			make_trigger_packet(local_ctlr, &local_data_buf);
 			serial_put_buffer(&local_port, local_data_buf);
 			serial_send(&local_port);
@@ -120,14 +143,20 @@ static void *clock_worker(void *arg) {
 		}
 
 		/* wait 1 ms before polling again */
-		nsleep(1000);
+		nsleep(1000000);
 	}
 
 	/* clear the sign upon shutdown */
 	make_text(local_ctlr, &local_data_buf, local_obj->address, " ");
 	serial_put_buffer(&local_port, local_data_buf);
+	if (local_obj->countdown_date.tm_year) {
+		make_text(local_ctlr, &local_data_buf,
+			local_obj->address + 1, " ");
+		serial_put_buffer(&local_port, local_data_buf);
+	}
 	make_trigger_packet(local_ctlr, &local_data_buf);
 	serial_put_buffer(&local_port, local_data_buf);
+
 	serial_send(&local_port);
 	reset_data_buf(&local_data_buf);
 
@@ -165,13 +194,12 @@ int main(int argc, char *argv[]) {
 	uint8_t clock_mode = 0;
 	pthread_t clock_thread;
 	pthread_attr_t attr;
-
 	struct signctl_obj_t clock_obj;
 
 	signal(SIGINT, exit_clock);
 	signal(SIGTERM, exit_clock);
 
-	const char *short_opt = "p:a:t:f:c:lrhv";
+	const char *short_opt = "p:a:t:f:c:ld:rhv";
 	const struct option long_opt[] = {
 		{"port",	required_argument,	NULL,	'p'},
 		{"address",	required_argument,	NULL,	'a'},
@@ -179,6 +207,7 @@ int main(int argc, char *argv[]) {
 		{"format",	required_argument,	NULL,	'f'},
 		{"ctlr",	required_argument,	NULL,	'c'},
 		{"clock",	no_argument,		NULL,	'l'},
+		{"countdown",	required_argument,	NULL,	'd'},
 		{"reset",	no_argument,		NULL,	'r'},
 
 		/* preset functions */
@@ -188,6 +217,8 @@ int main(int argc, char *argv[]) {
 		{"version",	no_argument,		NULL,	'v'},
 		{0,		0,			0,	0}
 	};
+
+	memset(&clock_obj.countdown_date, 0, sizeof(struct tm));
 
 	/* default sign controller configuration */
 	set_ctlr_config(&my_ctlr, 195, 255, 245);
@@ -269,6 +300,33 @@ keep_parsing_opts:
 			clock_mode = 1;
 			break;
 
+		case 'd':
+			if (!addr_idx) {
+				fprintf(stderr, "A sign address is needed for"
+						" countdown mode.\n");
+				return 1;
+			}
+			if (sscanf(optarg, "%04d/%02d/%02d %02d:%02d",
+				&clock_obj.countdown_date.tm_year,
+				&clock_obj.countdown_date.tm_mon,
+				&clock_obj.countdown_date.tm_mday,
+				&clock_obj.countdown_date.tm_hour,
+				&clock_obj.countdown_date.tm_min
+			) == 5) {
+				printf("Countdown date: "
+					"%04d/%02d/%02d %02d:%02d\n",
+					clock_obj.countdown_date.tm_year,
+					clock_obj.countdown_date.tm_mon,
+					clock_obj.countdown_date.tm_mday,
+					clock_obj.countdown_date.tm_hour,
+					clock_obj.countdown_date.tm_min);
+			} else {
+				fprintf(stderr,
+					"Invalid date entered.\n");
+				return 1;
+			}
+			break;
+
 		case 'r':
 			reset = 1;
 			break;
@@ -319,8 +377,8 @@ done_parsing_opts:
 		pthread_attr_destroy(&attr);
 
 		while (1) {
+			sleep(1);
 			if (shutdown) break;
-			nsleep(1000);
 		}
 
 		pthread_join(clock_thread, NULL);
@@ -349,6 +407,8 @@ done_parsing_opts:
 			/* send trigger packet */
 			make_trigger_packet(my_ctlr, &data_buf);
 			serial_put_buffer(&my_port, data_buf);
+
+			/* send data out */
 			serial_send(&my_port);
 			reset_data_buf(&data_buf);
 		}
