@@ -78,7 +78,14 @@ static void *clock_worker(void *arg) {
 	time_t countdown_secs = 0;
 	time_t time_left = 1;
 	int8_t cur_seconds = -1;
-	char *time_str;
+	char sign;
+	/* countdown */
+	uint32_t days;
+	uint32_t hours;
+	uint32_t minutes;
+	uint32_t seconds;
+	char clock_str[] = "^XB2^II%02u:%02u:%02u UTC";
+	char cdown_str[] = "^XB2^IIT-%03hu:%02hhu:%02hhu:%02hhu ";
 
 	struct signctl_obj_t *local_obj = (struct signctl_obj_t *)arg;
 	struct ctlr_cfg_t local_ctlr = *local_obj->ctlr;
@@ -102,14 +109,11 @@ static void *clock_worker(void *arg) {
 		/* did the seconds change? */
 		if (utc->tm_sec != cur_seconds) {
 			/* no colons on odd seconds */
-			if (cur_seconds & 1) {
-				time_str = "^XB2^II%02u %02u %02u UTC";
-			} else {
-				time_str = "^XB2^II%02u:%02u:%02u UTC";
-			}
+			clock_str[11] = clock_str[16] =
+				(utc->tm_sec & 1) ? ' ' : ':';
 
 			/* create the complete time string */
-			sprintf(text, time_str,
+			sprintf(text, clock_str,
 				utc->tm_hour, utc->tm_min, utc->tm_sec);
 
 			/* send it */
@@ -118,15 +122,35 @@ static void *clock_worker(void *arg) {
 			serial_put_buffer(&local_port, local_data_buf);
 
 			if (local_obj->countdown_date.tm_year) {
-				if (now < countdown_secs) {
+				if (now <= countdown_secs) {
 					time_left = countdown_secs - now;
-					time_str = "^XB2^IIT-%lu ";
+					sign = '-';
 				} else {
 					time_left = now - countdown_secs;
-					time_str = "^XB2^IIT+%lu ";
+					sign = '+';
 				}
 
-				sprintf(text, time_str, time_left);
+				/* calculate time units */
+				minutes = time_left / 60;
+				seconds = time_left % 60;
+
+				hours = minutes / 60;
+				minutes	 = minutes % 60;
+
+				days = hours / 24;
+				hours = hours % 24;
+
+				/* what if it's a leap year? */
+				days = days % 365;
+
+				cdown_str[8] = sign;
+				cdown_str[14] =
+					cdown_str[21] =
+					cdown_str[28] =
+					(seconds & 1) ? ' ' : ':';
+
+				sprintf(text, cdown_str,
+					days, hours, minutes, seconds);
 
 				make_text(local_ctlr, &local_data_buf,
 					local_obj->address + 1, text);
