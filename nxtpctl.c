@@ -61,12 +61,17 @@ static void show_help(char *name) {
 		"\t-r\t\t\tReset signs before new sending new data\n"
 		"\t-l\t\t\tUTC clock mode\n"
 		"\t-d yyyy/mm/dd hh:mm\tWhen -l is used, countdown to given\n"
-		"\t\t\t\tdate in T-x format on another sign (address + 1)\n"
+		"\t\t\t\tdate in T-ddd:hh:mm:ss format on another\n"
+		"\t\t\t\tsign (address + 1)\n"
 		"\n"
 		"\t-h\t\t\tShow this help and exit\n"
 		"\t-v\t\t\tShow version and exit\n"
 		"\n",
 	name, DEFAULT_PORT);
+
+	/* warn the user that the OS does not have 64 bit time functions */
+	if (sizeof(time_t) != sizeof(int64_t))
+		fprintf(stderr, "Your system is not Y2038 ready! :(\n");
 }
 
 static uint8_t shutdown;
@@ -80,10 +85,10 @@ static void *clock_worker(void *arg) {
 	int8_t cur_seconds = -1;
 	char sign;
 	/* countdown */
-	uint32_t days;
-	uint32_t hours;
-	uint32_t minutes;
-	uint32_t seconds;
+	int64_t days;
+	int64_t hours;
+	int64_t minutes;
+	int64_t seconds;
 	char clock_str[] = "^XB2^II%02u:%02u:%02u UTC";
 	char cdown_str[] = "^XB2^IIT-%03hu:%02hhu:%02hhu:%02hhu ";
 
@@ -133,13 +138,10 @@ static void *clock_worker(void *arg) {
 				/* calculate time units */
 				minutes = time_left / 60;
 				seconds = time_left % 60;
-
 				hours = minutes / 60;
 				minutes	 = minutes % 60;
-
 				days = hours / 24;
 				hours = hours % 24;
-
 				/* what if it's a leap year? */
 				days = days % 365;
 
