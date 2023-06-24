@@ -30,6 +30,6 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define VERSION "1.1.0"
+#define VERSION "1.1.1"
 
 #define BUF_LEN	512

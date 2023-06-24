@@ -153,7 +153,10 @@ static void *clock_worker(void *arg) {
 					(seconds & 1) ? ' ' : ':';
 
 				sprintf(text, cdown_str,
-					days, hours, minutes, seconds);
+					(uint16_t)days,
+					(uint8_t)hours,
+					(uint8_t)minutes,
+					(uint8_t)seconds);
 
 				make_text(local_ctlr, &local_data_buf,
 					local_obj->address + 1, text);
